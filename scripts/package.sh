@@ -2,7 +2,9 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
-package="$root/build/EvenBetterTouchTool-2.0.0-arm64"
+staging=$(mktemp -d "$root/build/.package-stage.XXXXXX")
+trap 'rm -rf "$staging"' EXIT
+package="$staging/EvenBetterTouchTool-2.0.0-arm64"
 mkdir -p "$package/scripts" "$package/docs"
 ditto build/EvenBetterTouchTool.app "$package/EvenBetterTouchTool.app"
 cp Install.command install.sh uninstall.sh README.md LICENSE "$package/"
