@@ -1,6 +1,6 @@
 # API choices and compatibility limits
 
-EvenBetterTouchTool 2.1 targets macOS 14 or later, Apple Silicon. It was compiled on macOS 26.6.2 with Swift 6.3.2, using Swift 5 language mode. Physical trackpad behavior on a 15-inch M4 MacBook Air remains a manual validation task.
+EvenBetterTouchTool 2.3 targets macOS 14 or later, Apple Silicon. It was compiled on macOS 26.6.2 with Swift 6.3.2, using Swift 5 language mode. Physical trackpad behavior on a 15-inch M4 MacBook Air remains a manual validation task.
 
 ## Contacts and physical distance
 
@@ -18,14 +18,14 @@ A **middle-click action** is implemented and can be assigned to a swipe or tap, 
 
 ## Native conflicts
 
-The driver observes input. It does **not** prevent Dock/WindowServer or applications from recognizing native gestures. There is no claim of selective native suppression. The setup checkboxes are explicit user declarations, not an automatic probe or preference writer. Changes to macOS native preferences after setup are not detected automatically.
+The raw driver observes contacts; an active Quartz scroll tap filters ordinary continuous page scrolling associated with custom swipes. It does **not** intercept Dock/WindowServer’s private Mission Control, App Exposé, dragging, or other gesture events. There is no claim of selective native suppression. The setup checkboxes are explicit user declarations, not an automatic probe or preference writer. Changes to macOS native preferences after setup are not detected automatically.
 
 For the intended configuration:
 
 | System Settings location | Required setting |
 | --- | --- |
-| Trackpad → More Gestures → Mission Control | Off |
-| Trackpad → More Gestures → App Exposé | Off |
+| Trackpad → More Gestures → Mission Control | Off for custom up actions; leave enabled for a native pass-through mapping |
+| Trackpad → More Gestures → App Exposé | Off for custom down actions; leave enabled for native pass-through |
 | Trackpad → More Gestures → Swipe between full-screen applications | Four fingers |
 | Trackpad → More Gestures → Swipe between pages | Two fingers only, or Off |
 | Trackpad → Point & Click → Look up & data detectors | Off for custom taps |
@@ -68,3 +68,15 @@ Settings and start-at-login edits apply only after an explicit Save. Closing ges
 Settings uses AppKit regular activation policy while its window is open, so macOS presents the app’s own main menu and temporary Dock icon. Closing the window restores accessory policy when Menu Bar Only is saved. Foreground changes and Save do not demote an open settings window. This follows [Apple’s activation policy definitions](https://developer.apple.com/documentation/appkit/nsapplication/activationpolicy-swift.enum/regular).
 
 Continuous availability is based on the action and its parameters. A one-shortcut Sequence is executed synchronously and can repeat for each distance interval, including imported legacy mappings; a one-shortcut application-specific action can also repeat when the foreground app matches. Adding a second shortcut makes that sequence single-trigger. Timed multi-step sequences never queue repeats or overlap. The editor explains unavailable repeat modes and offers Customize for This App when a mapping is inherited.
+
+## Scroll interception and keyboard delivery (2.3)
+
+The active `.defaultTap` listens only for scroll-wheel events at the session event tap and may return nil. The mouse-button observer remains listen-only. Contact recognition, filter state, and eligibility run on the driver's serial queue; no OS queries or UI work occur in the filter. Eligibility uses saved mappings, app/profile/row gates, permissions, and the selected device. Changes, emergency pause, sleep/disconnect, and permission revocation clear active state. Normal two-finger input, noncontinuous wheels, and events attributed to a synthesizing process pass through. Watchdogs expire stale correlation and lost momentum ends. A recognized native direction is never selected for suppression. There can be a small leading leak if a scroll arrives before its raw contact frame; a mixed native/custom axis is left untouched until raw direction is known. Concurrent smooth mouse scrolling while fingers rest on the trackpad and OS callback ordering require hardware testing. This does not suppress native WindowServer gestures. If the tap is unavailable, custom swipe execution is paused and reported; taps are independently guarded.
+
+System shortcut events now include explicit modifier-key down/up edges and Fn/NumericPad flags for arrow/navigation keys; function keys retain their Fn flag. Physically held modifiers are preserved, and the whole event list is created before posting to avoid partial allocation leaving a modifier held. Tests inspect actual Quartz events without posting them. A disabled symbolic shortcut does not fall back; an absent entry may use a user-verified saved fallback. Show Desktop needs its own verified key, distinct from App Exposé. The private symbolic-hotkey preference schema remains a compatibility limitation.
+
+## Volume feedback
+
+Core Audio adjustments aggregate a frame's distance steps into one clamped write per exposed output channel. The resulting output values are read back before feedback is shown. An owned nonactivating NSPanel and the app's status item show the percentage; a single rescheduled work item hides them after two seconds without another update. Showing feedback does not activate the app or replace the foreground profile. Unsupported output devices report an error. The 42% Diagnostics preview changes no audio. Apple's Control Center Sound panel has no supported opening/closing API used here; this UI is explicitly the app's own indicator.
+
+References: [Quartz event tap creation](https://developer.apple.com/documentation/coregraphics/cgevent/tapcreate(tap:place:options:eventsofinterest:callback:userinfo:)), [Fn event flag](https://developer.apple.com/documentation/coregraphics/cgeventflags/masksecondaryfn), and [Control Center user controls](https://support.apple.com/guide/mac-help/mchlc9d0e1f2/mac).

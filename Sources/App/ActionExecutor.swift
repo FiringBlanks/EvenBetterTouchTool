@@ -6,6 +6,7 @@ import CoreAudio
 final class ActionExecutor {
     static let eventTag: Int64 = 0x746872656566
     var report: (String) -> Void = { _ in }
+    var volumeChanged: (VolumeLevel) -> Void = { _ in }
     private var sequenceGeneration = 0
     private var lastBudgetTime = 0.0
     private var budget = 0
@@ -20,6 +21,10 @@ final class ActionExecutor {
             report("Finder: no eligible tabbed focused window"); return
         }
         let commands = ActionPlanner.commands(trigger.mapping.action, app: app, sensitivity: config.sensitivity(for: app))
+        if commands.count == 1, case .volume(let delta) = commands[0] {
+            report(trigger.mapping.action.kind.title)
+            perform(.volume(delta*Double(trigger.count)),config:config); return
+        }
         if commands.count > 1 {
             // A sequence never overlaps another sequence and is cancelled by any settings/app change.
             guard !sequenceActive else { report("Previous shortcut sequence is still running"); return }
@@ -49,7 +54,7 @@ final class ActionExecutor {
                 event?.cgEvent?.setIntegerValueField(.eventSourceUserData, value: Self.eventTag)
                 event?.cgEvent?.post(tap: .cghidEventTap)
             }
-        case .volume(let delta): do { try SystemAudio.adjust(delta) } catch { report(error.localizedDescription) }
+        case .volume(let delta): do { volumeChanged(try SystemAudio.adjust(delta)) } catch { report(error.localizedDescription) }
         case .mute: do { try SystemAudio.toggleMute() } catch { report(error.localizedDescription) }
         case .mouse(let button):
             guard let source = CGEventSource(stateID: .hidSystemState), let position = CGEvent(source: nil)?.location, let mouse = CGMouseButton(rawValue: UInt32(button)) else { return }
@@ -62,17 +67,17 @@ final class ActionExecutor {
                 NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { [weak self] _, error in if let error { DispatchQueue.main.async { self?.report(error.localizedDescription) } } }
             } else { report("Application is not running or not installed") }
         case .system(let kind):
-            if let s = SystemShortcuts.resolve(kind) ?? config.systemShortcuts[kind.rawValue] { post(s) }
-            else { report("Set or verify the \(kind.title) shortcut in General → System Shortcuts") }
+            let choice = SystemShortcuts.choice(kind)
+            if let s = choice.shortcut(fallback:config.systemShortcuts[kind.rawValue]) {
+                post(s); report("Sent \(kind.title): key \(s.keyCode), \(s.modifiers.joined(separator:" + "))")
+            } else if choice == .disabled { report("\(kind.title) keyboard shortcut is disabled in macOS. Enable it in Keyboard Shortcuts.") }
+            else { report("No shortcut for \(kind.title). Verify it in macOS, then configure General → System Shortcuts and Save.") }
         }
     }
     private func post(_ s: Shortcut) {
-        var flags = CGEventFlags()
-        for m in s.modifiers {
-            switch m { case "command": flags.insert(.maskCommand); case "shift": flags.insert(.maskShift); case "option": flags.insert(.maskAlternate); case "control": flags.insert(.maskControl); case "fn": flags.insert(.maskSecondaryFn); default: break }
-        }
-        let source = CGEventSource(stateID: .hidSystemState)
-        for down in [true, false] { let e = CGEvent(keyboardEventSource: source, virtualKey: s.keyCode, keyDown: down); e?.flags = flags; e?.setIntegerValueField(.eventSourceUserData, value: Self.eventTag); e?.post(tap: .cghidEventTap) }
+        let events = KeyboardEvents.make(s,physical:CGEventSource.flagsState(.hidSystemState))
+        if events.isEmpty { report("Could not construct keyboard events"); return }
+        for event in events { event.post(tap:.cghidEventTap) }
     }
     private func finderHasTabs() -> Bool {
         guard let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier == "com.apple.finder" else { return false }
@@ -105,20 +110,40 @@ final class ActionExecutor {
         return false
     }
 }
+/// Build the complete balanced sequence before posting any modifier down.
+/// Tests inspect actual Quartz event flags without injecting input.
+enum KeyboardEvents {
+    static func make(_ shortcut: Shortcut, physical: CGEventFlags = []) -> [CGEvent] {
+        var held = Set<String>()
+        for (name,flag): (String,CGEventFlags) in [("control",.maskControl),("option",.maskAlternate),("shift",.maskShift),("command",.maskCommand),("fn",.maskSecondaryFn)] where physical.contains(flag) { held.insert(name) }
+        guard let source = CGEventSource(stateID:.hidSystemState) else { return [] }
+        var events = [CGEvent]()
+        for stroke in KeyboardPlan.strokes(shortcut,held:held) {
+            var flags = CGEventFlags()
+            for m in stroke.modifiers {
+                switch m { case "command": flags.insert(.maskCommand); case "shift": flags.insert(.maskShift); case "option": flags.insert(.maskAlternate); case "control": flags.insert(.maskControl); case "fn": flags.insert(.maskSecondaryFn); default: break }
+            }
+            if stroke.navigation { flags.formUnion([.maskSecondaryFn,.maskNumericPad]) }
+            if stroke.function { flags.insert(.maskSecondaryFn) }
+            guard let event = CGEvent(keyboardEventSource:source,virtualKey:stroke.key,keyDown:stroke.down) else { return [] }
+            event.flags = flags; event.setIntegerValueField(.eventSourceUserData,value:ActionExecutor.eventTag)
+            events.append(event)
+        }
+        return events
+    }
+}
 enum SystemShortcuts {
     // These symbolic IDs are private preference schema, not an interception API.
     // Read explicit user settings only; absent/disabled entries require a verified fallback.
     static let ids: [ActionKind: String] = [.missionControl:"32", .appExpose:"33", .showDesktop:"36", .previousDesktop:"79", .nextDesktop:"81"]
     static func resolve(_ kind: ActionKind) -> Shortcut? {
+        choice(kind).shortcut(fallback:nil)
+    }
+    static func choice(_ kind: ActionKind) -> SystemShortcutChoice {
         CFPreferencesAppSynchronize("com.apple.symbolichotkeys" as CFString)
         guard let id = ids[kind], let dict = CFPreferencesCopyAppValue("AppleSymbolicHotKeys" as CFString, "com.apple.symbolichotkeys" as CFString) as? [String: Any],
-              let entry = dict[id] as? [String: Any], entry["enabled"] as? Bool == true,
-              let value = entry["value"] as? [String: Any], value["type"] as? String == "standard",
-              let p = value["parameters"] as? [NSNumber], p.count == 3, p[1].intValue >= 0, p[1].intValue <= 127 else { return nil }
-        let flags = p[2].uint64Value
-        var modifiers = [String]()
-        for (name, bit): (String, UInt64) in [("command",1<<20),("shift",1<<17),("control",1<<18),("option",1<<19),("fn",1<<23)] { if flags & bit != 0 { modifiers.append(name) } }
-        return Shortcut(keyCode: p[1].uint16Value, modifiers: modifiers)
+              let entry = dict[id] as? [String: Any] else { return .unavailable }
+        return SystemShortcutChoice.read(entry)
     }
 }
 enum SystemAudio {
@@ -132,7 +157,7 @@ enum SystemAudio {
         var settable = DarwinBoolean(false)
         return AudioObjectHasProperty(device, &address) && AudioObjectIsPropertySettable(device, &address, &settable) == noErr && settable.boolValue
     }
-    static func adjust(_ delta: Double) throws {
+    @discardableResult static func adjust(_ delta: Double) throws -> VolumeLevel {
         let device = try defaultDevice()
         var elements: [UInt32] = []
         var main = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyVolumeScalar, mScope: kAudioDevicePropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
@@ -158,6 +183,17 @@ enum SystemAudio {
             volume = ActionPlanner.volume(volume, delta: delta)
             guard AudioObjectSetPropertyData(device, &a, 0, nil, size, &volume) == noErr else { throw ConfigError.invalid("Audio output rejected volume change") }
         }
+        var sum = 0.0
+        for e in elements {
+            var a = main; a.mElement = e
+            var volume: Float32 = 0, size = UInt32(MemoryLayout<Float32>.size)
+            guard AudioObjectGetPropertyData(device,&a,0,nil,&size,&volume) == noErr else { throw ConfigError.invalid("Volume changed, but its value could not be read back") }
+            sum += Double(volume)
+        }
+        var muteAddress = AudioObjectPropertyAddress(mSelector:kAudioDevicePropertyMute,mScope:kAudioDevicePropertyScopeOutput,mElement:0)
+        var mute: UInt32 = 0, size = UInt32(MemoryLayout<UInt32>.size)
+        _ = AudioObjectGetPropertyData(device,&muteAddress,0,nil,&size,&mute)
+        return VolumeLevel(value:sum/Double(elements.count),muted:mute != 0)
     }
     static func toggleMute() throws {
         let device = try defaultDevice()

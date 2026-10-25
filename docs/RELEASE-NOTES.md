@@ -1,12 +1,8 @@
-# EvenBetterTouchTool 2.2.1 — Continuous shortcut editing
+# EvenBetterTouchTool 2.3.0 — Custom scroll filtering, system keys, and volume feedback
 
-Imported single-shortcut mappings were stored as Sequence actions. The editor incorrectly disabled Continuous for every Sequence, preventing these mappings from using distance-based repetition.
+- Custom swipes now correlate with an active scroll-event filter to prevent underlying page scrolling and momentum. Two-finger scrolls, mouse wheels, synthetic scrolls, and native/pass-through directions are preserved. Custom swipe actions pause if interception is unavailable. The filter does not suppress native WindowServer gestures; mixed-axis leading events and cross-device correlation still need physical tests.
+- System keyboard actions now send modifier down/up edges and the navigation/function flags used by physical keys. Explicitly disabled macOS shortcuts are respected. Diagnostics provides separate Mission Control, App Exposé, and Show Desktop tests with sent-shortcut or missing-configuration results. Show Desktop requires its own verified shortcut.
+- Volume gestures show the actual Core Audio output percentage in the app's menu bar icon and a nonactivating panel. Feedback hides two seconds after the last adjustment. It is our own panel, not the Control Center Sound menu. The 42% preview changes no audio.
+- Setup guidance supports mixed native/custom vertical mappings. Existing mappings and native preferences are preserved; settings still require Save.
 
-- A Sequence containing one shortcut now supports Continuous, including migrated threefinger settings.
-- A single application-specific shortcut can also repeat when the foreground app matches its target.
-- The editor, gesture grid, and recognizer share the same parameter-aware capability rule. Multi-step sequences remain one trigger per swipe; the editor explains why Continuous is unavailable.
-- Inherited app mappings offer Customize for This App before editing. Closing without Save still discards changes; Save commits only that gesture.
-
-This update preserves saved mappings and does not enable Continuous automatically. Open the desired swipe, enable Continuous, and click Save. Movement uses the current relative or measured interval; no time repeat, momentum, or queued sequence repetition is added.
-
-The app is experimental, ad-hoc signed, and unnotarized. macOS may require fresh Accessibility/Input Monitoring approval for the changed build. Actual shortcut delivery still needs physical testing; all 153 automated checks pass (119 core, 20 app-model, 14 installer), along with build/signing/smoke checks. Details are recorded in VALIDATION.md.
+The build remains experimental, ad-hoc signed, and unnotarized. Changed builds may need fresh OS permission approval. All 180 automated tests pass (141 core, 25 app-model, 14 installer), plus build/signing/smoke checks. Tests cover correlation, momentum/session cleanup, native directions, keyboard event encoding, shortcut resolution, and indicator timing. Hardware/browser scrolling, system hotkey delivery, and actual audio feedback must be verified using the manual checklist.

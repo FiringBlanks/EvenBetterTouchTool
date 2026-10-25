@@ -138,6 +138,7 @@ struct DashboardView: View {
                 LabeledContent("Configured custom mappings", value: String(Gesture.all.filter { let m = model.savedConfig.mapping($0, app: model.foreground); return m.enabled && ![.none,.native].contains(m.action.kind) }.count))
                 LabeledContent("Ready custom mappings", value: String(model.readyMappingCount))
                 LabeledContent("Physical button observation", value: model.buttonObserver ? "Available" : "Unavailable — taps paused")
+                LabeledContent("Custom gesture scroll filter", value: model.scrollFiltering ? "Active" : "Unavailable — custom swipes paused")
                 if !model.savedConfig.safety.tapConflictsResolved { Text("Custom taps also need the tap-conflict confirmation in Setup Assistant and Save.").font(.caption).foregroundStyle(.secondary) }
             }
             Section("Recovery") {
@@ -503,11 +504,11 @@ struct SetupView: View {
             }
             Section("2 · Resolve native swipe conflicts") {
                 Text("In Trackpad → More Gestures:")
-                Text("• Mission Control: Off\n• App Exposé: Off\n• Swipe between full-screen applications: Swipe with FOUR fingers\n• Swipe between pages: Two fingers only, or Off\n• Notification Center: keep its native two-finger edge gesture")
-                Text("In Accessibility → Pointer Control → Trackpad Options: turn OFF three-finger dragging (choose another dragging mode if needed). These settings free three-finger horizontal/vertical swipes and four-finger vertical swipes. The app supplies Mission Control/App Exposé through verified keyboard shortcuts.")
+                Text("• Mission Control / App Exposé: disable the native feature when assigning a custom action; keep it enabled for Native Pass Through\n• Swipe between full-screen applications: Swipe with FOUR fingers\n• Swipe between pages: Two fingers only, or Off\n• Notification Center: keep its native two-finger edge gesture")
+                Text("In Accessibility → Pointer Control → Trackpad Options: turn OFF three-finger dragging (choose another dragging mode if needed). For example, keep native four-finger Mission Control enabled if swipe up is Pass Through; turn native App Exposé off if swipe down is a custom Show Desktop action. Custom system actions use verified keyboard shortcuts.")
                 HStack { Button("Open Trackpad Settings") { model.openSettings(trackpadPane) }; Button("Open Pointer Control") { model.openSettings(pointerPane) } }
                 Toggle("I resolved the swipe and dragging conflicts above",isOn:$model.config.safety.nativeConflictsResolved)
-                Text("The app observes contacts; it cannot selectively suppress macOS gestures. This confirmation records your manual setup. Revisit it if you change native gestures later.").font(.caption).foregroundStyle(.secondary)
+                Text("The scroll filter prevents ordinary page scrolling during custom swipes. It cannot suppress native Mission Control, App Exposé, dragging, or other WindowServer gestures. Revisit this setup if you change mappings.").font(.caption).foregroundStyle(.secondary)
             }
             Section("3 · Resolve tap conflicts") {
                 Text("In Trackpad → Point & Click: turn OFF “Look up & data detectors” and “Tap to click”. Keep three-finger dragging OFF. This conservative setup prevents ordinary tap clicks and native Look Up during custom multi-finger taps. Physical clicks still work normally and cancel custom tap recognition.")
@@ -553,7 +554,7 @@ struct GeneralView: View {
                 Text("Explicit macOS keyboard settings take precedence. If a setting is absent, enter the shortcut you verified in System Settings and enable its fallback. The app never assumes Control–Left/Right is configured.").font(.caption).foregroundStyle(.secondary)
                 ForEach(systemActions) { kind in
                     DisclosureGroup(kind.title) {
-                        Text(SystemShortcuts.resolve(kind).map { "Read from macOS: key \($0.keyCode), \($0.modifiers.joined(separator:" + "))" } ?? "No enabled shortcut could be read from macOS")
+                        Text(SystemShortcuts.choice(kind) == .disabled ? "Disabled in macOS Keyboard Shortcuts. Enable it there before using this action." : SystemShortcuts.resolve(kind).map { "Read from macOS: key \($0.keyCode), \($0.modifiers.joined(separator:" + "))" } ?? "No explicit shortcut is stored by macOS. Verify its setting below and Save a fallback.")
                         Toggle("Use my verified fallback if macOS setting is unavailable",isOn:Binding(get:{model.config.systemShortcuts[kind.rawValue] != nil},set:{ enabled in
                             if enabled { model.config.systemShortcuts[kind.rawValue] = fallback(kind) } else { model.config.systemShortcuts.removeValue(forKey:kind.rawValue) }
                         }))
@@ -594,6 +595,7 @@ struct DiagnosticsView: View {
                 ForEach(model.snapshot.contacts,id:\.id) { c in Text("#\(c.id): x=\(c.x.formatted(.number.precision(.fractionLength(4))))  y=\(c.y.formatted(.number.precision(.fractionLength(4))))").font(.system(.caption,design:.monospaced)) }
             }
             Section("Recognition and actions") {
+                LabeledContent("Scroll interception",value:model.scrollFiltering ? "Active for custom swipes" : "Unavailable")
                 LabeledContent("Detected gesture",value:model.snapshot.gesture)
                 LabeledContent("Availability / cancellation",value:model.snapshot.reason.isEmpty ? "Ready" : model.snapshot.reason)
                 LabeledContent("Last action / result",value:model.lastAction)
@@ -601,6 +603,17 @@ struct DiagnosticsView: View {
                 LabeledContent("Foreground app",value:model.foreground)
                 LabeledContent("Sensitivity",value:"X \(model.savedConfig.sensitivity(for:model.foreground).horizontalMM) \(model.savedDistanceUnit) • Y \(model.savedConfig.sensitivity(for:model.foreground).verticalMM) \(model.savedDistanceUnit)")
                 LabeledContent("Device",value:model.engineStatus)
+            }
+            Section("Test system actions") {
+                Text("Send one action now to check keyboard delivery independently of gesture detection. App Exposé applies to the foreground app.").font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button("Test Mission Control") { model.testSystemAction(.missionControl) }
+                    Button("Test App Exposé") { model.testSystemAction(.appExpose) }
+                    Button("Test Show Desktop") { model.testSystemAction(.showDesktop) }
+                }.disabled(!model.accessibility)
+                Button("Preview Volume Indicator") { model.previewVolumeIndicator() }
+                LabeledContent("Volume indicator",value:model.volumeIndicatorVisible ? "Visible" : "Hidden")
+                Text("The preview shows 42% without changing system volume. During volume gestures it shows the actual output level and closes after two seconds.").font(.caption).foregroundStyle(.secondary)
             }
             Section("Diagnostics log") {
                 Toggle("Enable local in-memory action logging",isOn:$model.config.logging)

@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 @main struct AppModelTests {
     static var passed = 0, failed = 0
@@ -108,7 +109,7 @@ import Foundation
             try expect(model.readyMappingCount==0 && model.gestureBlockers.contains(.accessibility))
             model.accessibility=true; model.inputMonitoring=false
             try expect(model.readyMappingCount==0 && model.gestureBlockers.contains(.inputMonitoring))
-            model.inputMonitoring=true
+            model.inputMonitoring=true; model.scrollFiltering=true
             try expect(model.readyMappingCount>0)
         }
         test("Pending setup confirmations do not falsely mark gestures ready") { model, _ in
@@ -160,6 +161,33 @@ import Foundation
             try expect(try Data(contentsOf:url)==before)
             try expect(model.saveMapping(mapping,gesture:g,profileID:""))
             try expect(try ConfigurationStore(url:url).load().mappings[g.id]!.continuous)
+        }
+        test("Indicator preview changes no audio or saved settings") { model, url in
+            let before=try Data(contentsOf:url); var levels=[VolumeLevel]()
+            model.onVolumeFeedback={ levels.append($0) }; model.previewVolumeIndicator()
+            try expect(levels==[VolumeLevel(value:0.42,muted:false)] && !model.hasPendingChanges)
+            try expect(try Data(contentsOf:url)==before)
+        }
+        test("System test rejects missing Accessibility without saving") { model, url in
+            let before=try Data(contentsOf:url); model.accessibility=false
+            model.testSystemAction(.showDesktop)
+            try expect(model.message.contains("Accessibility") && !model.hasPendingChanges)
+            try expect(try Data(contentsOf:url)==before)
+        }
+        test("Quartz system arrow events include real modifier edges and navigation flags") { _, _ in
+            let events=KeyboardEvents.make(Shortcut(keyCode:126,modifiers:["control"]))
+            try expect(events.count==4 && events.map { $0.getIntegerValueField(.keyboardEventKeycode) } == [59,126,126,59])
+            try expect(events[1].flags.contains([.maskControl,.maskSecondaryFn,.maskNumericPad]))
+            try expect(events[0].type == .flagsChanged && events.last!.type == .flagsChanged && !events.last!.flags.contains(.maskControl))
+            try expect(events.allSatisfy { $0.getIntegerValueField(.eventSourceUserData)==ActionExecutor.eventTag })
+        }
+        test("Quartz F11 events preserve function flag without numeric-pad flags") { _, _ in
+            let events=KeyboardEvents.make(Shortcut(keyCode:103,modifiers:[]))
+            try expect(events.count==2 && events[0].flags.contains(.maskSecondaryFn) && !events[0].flags.contains(.maskNumericPad))
+        }
+        test("Quartz shortcut does not release a user's held Control key") { _, _ in
+            let events=KeyboardEvents.make(Shortcut(keyCode:126,modifiers:["control"]),physical:.maskControl)
+            try expect(events.count==2 && events.allSatisfy { $0.flags.contains(.maskControl) && $0.getIntegerValueField(.keyboardEventKeycode)==126 })
         }
         print("\n\(passed) model tests passed; \(failed) failed")
         if failed > 0 { exit(1) }

@@ -9,7 +9,7 @@ enum PrivacyPermission: String, CaseIterable, Identifiable {
     }
 }
 enum GestureBlocker: String, Identifiable {
-    case disabled, emergencyPause, accessibility, inputMonitoring, trackpad, nativeSetup, calibration, configuration, legacyDaemon, calibrating, noMappings
+    case disabled, emergencyPause, accessibility, inputMonitoring, trackpad, nativeSetup, calibration, configuration, legacyDaemon, calibrating, noMappings, scrollFiltering
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -24,12 +24,13 @@ enum GestureBlocker: String, Identifiable {
         case .legacyDaemon: return "Stop the original threefinger daemon"
         case .calibrating: return "Finish the calibration measurement"
         case .noMappings: return "No custom gestures are enabled for this app"
+        case .scrollFiltering: return "Custom swipe scroll interception is unavailable"
         }
     }
 }
 enum GestureReadiness {
     static func blockers(config: Configuration, app: String, device: String, accessibility: Bool, inputMonitoring: Bool,
-                         runtimePaused: Bool = false, legacyDaemon: Bool = false, configurationError: Bool = false, calibrating: Bool = false) -> [GestureBlocker] {
+                         runtimePaused: Bool = false, legacyDaemon: Bool = false, configurationError: Bool = false, calibrating: Bool = false, scrollFiltering: Bool = true) -> [GestureBlocker] {
         var result: [GestureBlocker] = []
         if !config.enabled { result.append(.disabled) }
         if runtimePaused { result.append(.emergencyPause) }
@@ -40,6 +41,7 @@ enum GestureReadiness {
         if configurationError { result.append(.configuration) }
         if legacyDaemon { result.append(.legacyDaemon) }
         if calibrating { result.append(.calibrating) }
+        if !scrollFiltering && Gesture.all.contains(where: { $0.direction.isSwipe && config.blockedReason($0,mapping:config.mapping($0,app:app),device:device) == nil }) { result.append(.scrollFiltering) }
         if !Gesture.all.contains(where: {
             let m = config.mapping($0, app: app)
             return m.enabled && $0.direction != .click && ![.none, .native, .notificationCenter].contains(m.action.kind)

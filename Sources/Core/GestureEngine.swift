@@ -35,6 +35,7 @@ final class GestureEngine {
     private var remainder = 0.0, lastSign = 0.0
     private var maxMovement = 0.0
     private var lastFire = -Double.infinity
+    var trackedFingerCount: Int { cancelled ? 0 : start.count }
     init(config: Configuration, app: String, device: String) { self.config = config; self.app = app; self.device = device }
     func cancel(_ reason: String = "Cancelled; lift all fingers") { cancelled = true; remainder = 0; snapshot.reason = reason }
     func reset() {

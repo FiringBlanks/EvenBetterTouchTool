@@ -3,9 +3,9 @@
 ## Artifacts
 
 - Standalone Apple Silicon application: `build/EvenBetterTouchTool.app`
-- Installable archive: `build/EvenBetterTouchTool-2.2.1-arm64.zip`
-- Archive checksum: `build/EvenBetterTouchTool-2.2.1-arm64.zip.sha256`
-- Raw local build/test log: `build/continuous-check.log`
+- Installable archive: `build/EvenBetterTouchTool-2.3.0-arm64.zip`
+- Archive checksum: `build/EvenBetterTouchTool-2.3.0-arm64.zip.sha256`
+- Raw local build/test log: `build/input-feedback-check-final.log`
 - Double-click installer: `Install.command`
 - Local installer: `install.sh` (inspect using `./install.sh --dry-run` first)
 - Uninstaller: `uninstall.sh`
@@ -19,7 +19,7 @@ Build host: Apple Silicon, macOS 26.6.2, Swift 6.3.2, Command Line Tools. Target
 `make check` completed successfully:
 
 - Native application compilation: PASS, no compiler warnings.
-- Deterministic automated core suite: **119 core + 20 app-model + 14 shortcut lifecycle tests passed, 0 failed (153 total)**.
+- Deterministic automated core suite: **141 core + 25 app-model + 14 shortcut lifecycle tests passed, 0 failed (180 total)**.
 - `--smoke-test`: PASS (default schema validation and AppKit-linked executable startup).
 - `codesign --verify --strict`: PASS.
 - App `Info.plist` validation: PASS.
@@ -115,3 +115,11 @@ The 2.2.0 tested executable was installed with the local installer, and its byte
 ## Version 2.2.1 checks
 
 The preview’s Global three-finger right editor was changed to Sequence with one shortcut: Continuous was enabled and switched on successfully. Adding a second shortcut disabled it with a visible explanation; removing that shortcut re-enabled it. Clicking Save persisted the single-shortcut Sequence with continuous=true in the isolated preview configuration. The preview starts no gesture driver and sends no keyboard actions. Core tests verify count-based repeats, fractions, reversal, stationary contacts, application targeting, and multi-step single-trigger behavior. An app-model test verifies explicit gesture Save persistence. Actual shortcut delivery and timing remain hardware tests.
+
+## Version 2.3.0 checks
+
+Build, smoke, signature, metadata, and script checks passed. The core suite tests custom/native scroll directions, normal scrolling, synthetic and line-wheel bypass, fresh/stale contacts, staggered release, momentum ending/expiration, and disabled filtering; keyboard plans, symbolic shortcut resolution, and deterministic volume-dismissal deadlines are covered too. App-model tests inspect real Quartz event objects (modifier edges, arrow Fn/NumericPad flags, F11 flags, and preservation of held modifiers) without posting them. These event-object tests need access to the host graphics session: the restricted process stalled inside CGEvent construction and was terminated; the complete final suite passed in the normal session. No test injected input or changed system audio.
+
+The disabled UI preview showed the three system-action buttons, volume preview, and filter status. Clicking Preview Volume Indicator changed its status from Hidden to Visible, then back to Hidden automatically; the preview changes no system volume. The menu-bar controller falls back to the screen's top-right corner if its icon is hidden. System Settings was inspected: native Mission Control is four-finger up, native App Exposé is Off, and keyboard Mission Control/Applications windows/Show Desktop are enabled on Control-Up/Control-Down/F11. This verifies configuration, not physical gesture delivery. Actual browser scroll interception, native system action delivery, and audio-level feedback remain physical acceptance checks after permission approval.
+
+New components: `Sources/Core/ScrollFilter.swift`, `KeyboardPlan.swift`, `SystemShortcutChoice.swift`, and `VolumePresentation.swift`; `Sources/App/VolumeIndicator.swift` owns the nonactivating feedback panel. No private Control Center or native-gesture suppression interface is used.

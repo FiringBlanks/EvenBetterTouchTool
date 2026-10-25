@@ -33,11 +33,16 @@ final class TrackpadDriver {
     private var timer: Timer?
     private var suspended = false
     private var observerAvailable = false
+    private var scrollTap: CFMachPort?
+    private var scrollSource: CFRunLoopSource?
+    private var scrollFilter = ScrollFilter()
+    private var permitted = false
     var onFrame: ((EngineSnapshot) -> Void)?
     var onTrigger: ((GestureTrigger, String, Int) -> Void)?
     var onDevices: (([TrackpadInfo], String) -> Void)?
     var onStatus: ((String) -> Void)?
     var onButtonObserver: ((Bool) -> Void)?
+    var onScrollFiltering: ((Bool) -> Void)?
     var currentGeneration: Int { queue.sync { generation } }
     init() { Self.current = self }
     private func symbol<T>(_ name: String, _ type: T.Type) -> T? {
@@ -53,6 +58,7 @@ final class TrackpadDriver {
         stop = symbol("MTDeviceStop", (@convention(c) (MTDeviceRef?) -> Void).self)
         guard create != nil, register != nil, unregister != nil, start != nil, stop != nil else { onStatus?("MultitouchSupport unavailable or incompatible"); return }
         installButtonObserver()
+        installScrollFilter()
         reconnect()
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in self?.suspended = true; self?.disconnect() })
@@ -68,12 +74,24 @@ final class TrackpadDriver {
         let needsReconnect = queue.sync { () -> Bool in
             let old = engine.config.selectedDevice
             engine.config = config; engine.app = app; engine.cancel("Settings or foreground app changed; lift fingers")
+            updateScrollEligibility()
             generation += 1
             return old != config.selectedDevice
         }
         if needsReconnect { reconnect() }
     }
-    func cancel() { queue.sync { engine.cancel(); generation += 1 } }
+    func cancel() { queue.sync { engine.cancel(); updateScrollEligibility(); generation += 1 } }
+    func setPermissions(_ granted: Bool) {
+        queue.sync { if permitted != granted { permitted = granted; updateScrollEligibility() } }
+        if granted { installScrollFilter() }
+    }
+    private func updateScrollEligibility() {
+        let c = engine.config
+        let custom = permitted ? Set(Gesture.all.filter {
+            $0.direction.isSwipe && c.blockedReason($0,mapping:c.mapping($0,app:engine.app),device:engine.device) == nil
+        }) : []
+        scrollFilter.configure(custom:custom)
+    }
     func end() {
         timer?.invalidate(); timer = nil
         for token in observers { NSWorkspace.shared.notificationCenter.removeObserver(token) }; observers = []
@@ -81,6 +99,9 @@ final class TrackpadDriver {
         if let tapObserver { CGEvent.tapEnable(tap: tapObserver, enable: false); CFMachPortInvalidate(tapObserver) }
         if let tapSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), tapSource, .commonModes) }
         tapObserver = nil; tapSource = nil
+        if let scrollTap { CGEvent.tapEnable(tap:scrollTap,enable:false); CFMachPortInvalidate(scrollTap) }
+        if let scrollSource { CFRunLoopRemoveSource(CFRunLoopGetMain(),scrollSource,.commonModes) }
+        scrollTap = nil; scrollSource = nil; onScrollFiltering?(false)
     }
     func reconnect() {
         guard !suspended else { return }
@@ -106,7 +127,7 @@ final class TrackpadDriver {
         let index = found.firstIndex { $0.id == configured } ?? (configured.isEmpty && !found.isEmpty ? 0 : nil)
         if let index {
             let device = devices[index]
-            queue.sync { activeDevice = device; engine.device = found[index].id; engine.reset(); generation += 1 }
+            queue.sync { activeDevice = device; engine.device = found[index].id; engine.reset(); updateScrollEligibility(); generation += 1 }
             register?(device, trackpadFrameCallback); start?(device, 0)
             onDevices?(found, found[index].id); onStatus?("Listening to selected trackpad")
         } else {
@@ -115,7 +136,7 @@ final class TrackpadDriver {
     }
     private func disconnect() {
         // Disable delivery before stopping/unregistering; queued frames cannot fire.
-        let old = queue.sync { () -> MTDeviceRef? in let old = activeDevice; activeDevice = nil; engine.reset(); generation += 1; return old }
+        let old = queue.sync { () -> MTDeviceRef? in let old = activeDevice; activeDevice = nil; engine.reset(); scrollFilter.configure(custom:[]); generation += 1; return old }
         if let old { stop?(old); unregister?(old, trackpadFrameCallback) }
         devices = []; infos = []; deviceList = nil
         onDevices?([], ""); onStatus?("Trackpad paused / disconnected")
@@ -123,11 +144,16 @@ final class TrackpadDriver {
     private func checkDevices() {
         guard !suspended else { return }
         if tapObserver == nil && CGPreflightListenEventAccess() { installButtonObserver() }
+        if scrollTap == nil && AXIsProcessTrusted() && CGPreflightListenEventAccess() { installScrollFilter() }
         guard let list = create?()?.takeRetainedValue() else { return }
         let values = (0..<CFArrayGetCount(list)).compactMap { CFArrayGetValueAtIndex(list, $0) }.map { UnsafeMutableRawPointer(mutating: $0) }
         if values != devices { reconnect() }
-        if !AXIsProcessTrusted() || !CGPreflightListenEventAccess() { cancel() }
+        if !AXIsProcessTrusted() || !CGPreflightListenEventAccess() {
+            queue.sync { permitted = false; engine.cancel(); updateScrollEligibility(); generation += 1 }
+        }
         if let tapObserver, !CGEvent.tapIsEnabled(tap: tapObserver) { CGEvent.tapEnable(tap: tapObserver, enable: true) }
+        if let scrollTap, !CGEvent.tapIsEnabled(tap:scrollTap) { CGEvent.tapEnable(tap:scrollTap,enable:true) }
+        onScrollFiltering?(scrollTap.map { CGEvent.tapIsEnabled(tap:$0) } ?? false)
     }
     fileprivate func receive(device: MTDeviceRef?, contacts: [Contact], time: Double) {
         let received = ProcessInfo.processInfo.systemUptime
@@ -135,6 +161,7 @@ final class TrackpadDriver {
             guard let self, device == self.activeDevice else { return }
             let frame = TouchFrame(time: time, contacts: contacts, physicalButton: !self.mouseButtons.isEmpty || received-self.lastPhysicalClick < 0.1)
             let triggers = self.engine.process(frame), app = self.engine.app, generation = self.generation
+            self.scrollFilter.observe(contacts:contacts,trackedFingers:self.engine.trackedFingerCount,time:received)
             if received-self.lastPublish >= 1/20 || contacts.isEmpty {
                 self.lastPublish = received
                 let snapshot = self.engine.snapshot
@@ -154,6 +181,35 @@ final class TrackpadDriver {
                 }
             }
         }
+    }
+    private func installScrollFilter() {
+        guard library != nil, scrollTap == nil, AXIsProcessTrusted(), CGPreflightListenEventAccess() else { return }
+        scrollTap = CGEvent.tapCreate(tap:.cgSessionEventTap,place:.headInsertEventTap,options:.defaultTap,
+            eventsOfInterest:1 << CGEventType.scrollWheel.rawValue,callback:{ _, type, event, _ in
+                guard let driver = TrackpadDriver.current else { return Unmanaged.passUnretained(event) }
+                if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                    driver.onScrollFiltering?(false)
+                    driver.queue.sync { driver.scrollFilter.configure(custom:[]) }
+                    if let tap = driver.scrollTap { CGEvent.tapEnable(tap:tap,enable:true) }
+                    driver.queue.sync { driver.updateScrollEligibility() }
+                    driver.onScrollFiltering?(driver.scrollTap.map { CGEvent.tapIsEnabled(tap:$0) } ?? false)
+                    return Unmanaged.passUnretained(event)
+                }
+                let suppress = driver.queue.sync {
+                    driver.scrollFilter.suppress(time:ProcessInfo.processInfo.systemUptime,
+                        continuous:event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0,
+                        synthetic:event.getIntegerValueField(.eventSourceUnixProcessID) != 0 || event.getIntegerValueField(.eventSourceUserData) == ActionExecutor.eventTag,
+                        dx:event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2),dy:event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1),
+                        phase:event.getIntegerValueField(.scrollWheelEventScrollPhase),momentum:event.getIntegerValueField(.scrollWheelEventMomentumPhase))
+                }
+                return suppress ? nil : Unmanaged.passUnretained(event)
+            },userInfo:nil)
+        if let scrollTap {
+            scrollSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault,scrollTap,0)
+            if let scrollSource { CFRunLoopAddSource(CFRunLoopGetMain(),scrollSource,.commonModes) }
+            CGEvent.tapEnable(tap:scrollTap,enable:true)
+        }
+        onScrollFiltering?(scrollTap != nil)
     }
     private func installButtonObserver() {
         guard tapObserver == nil else { return }

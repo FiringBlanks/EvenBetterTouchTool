@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var hotkey: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
     private var lockDescriptor: Int32 = -1
+    private let volumeIndicator = VolumeIndicator()
     private let preview = CommandLine.arguments.contains("--ui-preview")
     func applicationDidFinishLaunching(_ notification: Notification) {
         let cache = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches/org.evenbettertouchtool.app")
@@ -36,6 +37,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.addItem(withTitle: "Quit EvenBetterTouchTool", action: #selector(quit), keyEquivalent: "q")
         for menuItem in menu.items { menuItem.target = self }
         item.menu = menu; statusItem = item
+        volumeIndicator.onVisibilityChanged = { [weak self, weak item] visible in
+            item?.length = visible ? NSStatusItem.variableLength : NSStatusItem.squareLength
+            self?.model.volumeIndicatorVisible = visible
+        }
+        model.onVolumeFeedback = { [weak self] level in
+            guard let self else { return }; self.statusItem?.length = NSStatusItem.variableLength
+            self.volumeIndicator.show(level,anchoredTo:self.statusItem?.button)
+        }
         installMainMenu()
         installEmergencyHotkey()
         if !preview { model.start() }
@@ -62,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationWillTerminate(_ notification: Notification) {
         model?.stop()
+        volumeIndicator.hide()
         if let hotkey { UnregisterEventHotKey(hotkey) }
         if let eventHandler { RemoveEventHandler(eventHandler) }
         if lockDescriptor >= 0 { close(lockDescriptor) }

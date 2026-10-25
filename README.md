@@ -6,7 +6,7 @@ A free, MIT-licensed native SwiftUI menu bar app built from [firedev/threefinger
 
 ## Download and change settings
 
-Download the [Apple Silicon release ZIP](https://github.com/FiringBlanks/EvenBetterTouchTool/releases/download/v2.2.1/EvenBetterTouchTool-2.2.1-arm64.zip) from [GitHub Releases](https://github.com/FiringBlanks/EvenBetterTouchTool/releases). Extract it and run `Install.command` (or `./install.sh` in Terminal). The installer places the app in your personal Applications folder, creates a launch shortcut in the main Applications folder (or on the desktop if that folder is unavailable), and safely stops the original threefinger service if present. The app is also included directly in the ZIP.
+Download the [Apple Silicon release ZIP](https://github.com/FiringBlanks/EvenBetterTouchTool/releases/download/v2.3.0/EvenBetterTouchTool-2.3.0-arm64.zip) from [GitHub Releases](https://github.com/FiringBlanks/EvenBetterTouchTool/releases). Extract it and run `Install.command` (or `./install.sh` in Terminal). The installer places the app in your personal Applications folder, creates a launch shortcut in the main Applications folder (or on the desktop if that folder is unavailable), and safely stops the original threefinger service if present. The app is also included directly in the ZIP.
 
 After installation, open **Finder → Applications → EvenBetterTouchTool** (or the desktop shortcut). Drag that icon into the Dock if you want one-click access. The shortcut opens the installed app.
 
@@ -35,7 +35,7 @@ Do not run `brew services start/upgrade threefinger` alongside this app. If you 
 If no gestures work or a permission list says “No Items”, follow the [step-by-step permission and readiness guide](docs/PERMISSIONS.md). The file picker opened by + is normal; use Copy App Path and Command–Shift–G to select the running installed app.
 
 1. Grant **EvenBetterTouchTool.app** Accessibility and Input Monitoring in System Settings → Privacy & Security. Use Dashboard or Setup Assistant to open/request these permissions. Quit/reopen after an Input Monitoring change. The old CLI daemon's grants do not transfer.
-2. Complete **Setup Assistant**: turn native Mission Control/App Exposé trackpad swipes OFF, retain four-finger horizontal full-screen switching, restrict page swipes to two fingers or Off, and turn three-finger dragging OFF. Custom taps additionally require Look Up and Tap to click OFF. The full table and reasoning are in [COMPATIBILITY.md](docs/COMPATIBILITY.md). The app does not alter system preferences or suppress native gestures automatically.
+2. Complete **Setup Assistant**: turn native Mission Control/App Exposé trackpad swipes OFF, retain four-finger horizontal full-screen switching, restrict page swipes to two fingers or Off, and turn three-finger dragging OFF. Custom taps additionally require Look Up and Tap to click OFF. The full table and reasoning are in [COMPATIBILITY.md](docs/COMPATIBILITY.md). The app does not alter system preferences. It filters ordinary continuous scroll events associated with custom swipes, but cannot suppress native WindowServer gestures. Keep a native feature enabled when you deliberately assign Pass Through; disable its conflict when assigning a custom action.
 3. Verify keyboard shortcuts for Mission Control and Application windows. If the app cannot read a configured shortcut, set a user-verified fallback under General → System Shortcuts. No Control–Arrow shortcut is silently assumed.
 4. Start using gestures with **relative sensitivity**: intervals are a percentage of trackpad width/height, with no measurement required. In Sensitivity, adjust how far you move for each action. For exact millimeter thresholds, optionally expand **Trackpad Calibration → Precision calibration**, enter both measured dimensions and click **Use Measurements**, or measure X/Y with single-finger trials. Click Save. Raw normalized coordinates are never silently treated as millimeters.
 5. Click **Save** to apply setup. Enable **Start at Login** under General and click Save if desired. macOS Login Items manages startup; no second LaunchAgent is installed.
@@ -67,7 +67,7 @@ Profiles resolve **enabled application override → global mapping → no action
 
 Available actions include tab/desktop navigation, Mission Control, App Exposé, Show Desktop, recent-app switching, browser Back/Forward, system Play/Pause/Next/Previous Track, volume/mute, Lock Screen, screenshot UI, mouse down/up pairs, custom keyboard shortcuts and ordered sequences, opening/activating applications, target-app shortcuts, No Action, and native pass-through. Each action exposes relevant parameters. Notification Center has no reliable public opening API here: assign a custom user-configured system shortcut instead. Click-trigger mappings remain unavailable, but a middle-click **action** may be assigned to another supported gesture. Single-shortcut sequences (including migrated settings) and single application-specific shortcuts support Continuous. Multi-step sequences and disruptive system actions run once per contact session. In an inherited app mapping, choose Customize for This App before editing; Save commits the override.
 
-Chrome uses Command–Option–Arrow. Finder uses Control–Tab / Control–Shift–Tab after a focused-window accessibility check for multiple tab controls; no eligible window means no action. Finder's hierarchy needs on-device validation. Media actions use dedicated system media events, **not F8**. Volume uses the current default output device's Core Audio properties and reports unsupported hardware volume/mute gracefully.
+Chrome uses Command–Option–Arrow. Finder uses Control–Tab / Control–Shift–Tab after a focused-window accessibility check for multiple tab controls; no eligible window means no action. Finder's hierarchy needs on-device validation. Media actions use dedicated system media events, **not F8**. Volume uses the current default output device's Core Audio properties and reports unsupported hardware volume/mute gracefully. Volume gestures display a nonactivating panel below the app’s menu bar icon, with the actual output percentage; the icon temporarily becomes a speaker with a percentage. It closes two seconds after the last successful adjustment. This is EvenBetterTouchTool’s indicator, not macOS Control Center’s Sound panel.
 
 ### Persistence
 
@@ -79,7 +79,7 @@ Click the hand in the **Fingers** column to stage enabling/disabling the entire 
 
 Valid external JSON edits reload within two seconds. If an external edit arrives while drafts exist, the app retains them and asks you to Reset and review the saved configuration before saving, preventing accidental overwrites. Invalid external edits pause custom actions. Imported local consent/calibration is cleared, and imports remain pending until Save. Export writes only the saved configuration. **Emergency disable is immediate and temporary**; it never writes settings implicitly. Click Save to persist a disabled master switch.
 
-Diagnostics displays raw contacts, movement with explicit % or mm units, recognized gesture, block/cancellation reason, action/result, foreground app, sensitivity, timestamp, and device status. Optional action logging is bounded to 250 in-memory entries; no typed content is logged. Copy Diagnostics puts current diagnostic information on the clipboard only when requested.
+Diagnostics includes independent Mission Control, App Exposé, and Show Desktop test buttons, plus a volume indicator preview that changes no audio. System-action results name the shortcut sent or explain a disabled/missing setting. Diagnostics displays raw contacts, movement with explicit % or mm units, recognized gesture, block/cancellation reason, action/result, foreground app, sensitivity, timestamp, and device status. Optional action logging is bounded to 250 in-memory entries; no typed content is logged. Copy Diagnostics puts current diagnostic information on the clipboard only when requested.
 
 ## Build, signing, and development
 
@@ -104,6 +104,9 @@ The upstream MIT license and `mt.h` attribution are retained. Original daemon so
 - `Sources/Core/GestureReadiness.swift`: explicit permission/setup blockers and privacy pane routes.
 - `Sources/Core/SettingsDraft.swift`: pending edits, scoped gesture saves, external-edit conflicts, and row switches.
 - `Sources/Core/GestureEngine.swift`: pure recognition and reusable command planning.
+- `Sources/Core/ScrollFilter.swift`: fresh-contact scroll/momentum correlation for custom swipes.
+- `Sources/Core/KeyboardPlan.swift` and `SystemShortcutChoice.swift`: balanced shortcut events and verified OS/fallback selection.
+- `Sources/Core/VolumePresentation.swift` and `Sources/App/VolumeIndicator.swift`: timed, nonactivating volume feedback.
 - `Sources/App/TrackpadDriver.swift`: runtime contact bridge, device selection, serial processing, button observation, lifecycle.
 - `Sources/App/ActionExecutor.swift`: keyboard/media/mouse events, Finder checks, Core Audio, configured system shortcuts.
 - `Sources/App/AppModel.swift`: live settings, permissions, profiles, calibration, diagnostics.
@@ -125,7 +128,7 @@ See [build/validation results and the file manifest](docs/VALIDATION.md). Run `m
 - No contacts: check Input Monitoring for the installed app, quit/reopen, then Reconnect Trackpad. A broken private ABI fails safely and may require a driver update.
 - Double native actions: complete the conflict table; the app cannot suppress native gestures that remain enabled. Do not run the old daemon alongside the app.
 - Finder does nothing: use multiple tabs in the focused Finder window. If the OS exposes a different accessibility hierarchy, the guard deliberately does nothing.
-- Mission Control/desktops do nothing: enable/check the corresponding system shortcut or confirm an exact fallback in General. Native pass-through only works while the matching native gesture is enabled.
+- Mission Control/Show Desktop/desktops do nothing: use Diagnostics → Test system actions, then enable/check the corresponding macOS shortcut and Save a verified fallback in General. Show Desktop needs its own shortcut (often F11); assigning the action alone does not configure a fallback. Explicitly disabled OS shortcuts stay disabled, even with a saved fallback. Synthesized shortcuts include balanced modifier edges and navigation/function flags. Native pass-through only works while the matching native gesture is enabled.
 - Media does nothing: establish a macOS-recognized media session; compare with the dedicated keyboard media key. Confirm Accessibility and inspect the diagnostic action result.
 - Physical press fires a tap: disable the tap mapping and record diagnostics. Physical click interception is unsupported; no reliability claim is made for inter-stream timing before hardware tests.
 - Volume unsupported: some outputs expose no software volume or mute. Use that device's hardware controls.
@@ -142,3 +145,7 @@ Turn OFF **General → Start at Login**, then run:
 ```
 
 The uninstaller unregisters the app's login item, removes only Applications/desktop shortcuts that resolve to this installed app, and removes the identified EvenBetterTouchTool app. An unrelated app, alias, or file is preserved. You can pass the Applications shortcut itself to the uninstaller; it resolves to the real installed app first. Configuration, migration backups, and original CLI binaries remain. Remove stale privacy entries and restore native trackpad gestures manually. To remove settings later, delete only `~/.config/threefinger.json` and the specific migration backups you no longer need. The old daemon is never automatically restarted. For rollback, restore your saved original config and LaunchAgent from the migration backup and bootstrap only that original service after quitting/removing the app.
+
+### Custom swipes and underlying scrolling
+
+An active Quartz filter correlates continuous scroll events with fresh contacts from the selected trackpad and the saved app/profile mappings. It suppresses custom swipe scrolling and its momentum; ordinary two-finger scrolls, line-based mouse wheels, synthetic scrolling, and Native Pass Through directions remain available. If interception cannot be installed, custom swipe actions pause and Dashboard reports it. The filter cannot identify a trackpad from a public scroll event alone, so correlation and the first events of a mixed native/custom axis need physical testing; do not treat this as guaranteed suppression of every native gesture.

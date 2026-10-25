@@ -7,7 +7,7 @@ struct InstalledApplication: Identifiable {
     var id: String; var name: String; var url: URL
 }
 final class AppModel: ObservableObject {
-    static let version = "2.2.1"
+    static let version = "2.3.0"
     private(set) var settingsVisible = false
     var distanceUnit: String { config.movementScale(for: activeDevice).unit }
     var savedDistanceUnit: String { savedConfig.movementScale(for: activeDevice).unit }
@@ -23,7 +23,7 @@ final class AppModel: ObservableObject {
     var gestureBlockers: [GestureBlocker] {
         GestureReadiness.blockers(config: savedConfig, app: foreground, device: activeDevice,
             accessibility: accessibility, inputMonitoring: inputMonitoring, runtimePaused: runtimePaused,
-            legacyDaemon: !legacyPIDs.isEmpty, configurationError: !configurationIssue.isEmpty, calibrating: calibrationAxis != nil)
+            legacyDaemon: !legacyPIDs.isEmpty, configurationError: !configurationIssue.isEmpty, calibrating: calibrationAxis != nil, scrollFiltering: scrollFiltering)
     }
     var readyMappingCount: Int {
         guard gestureBlockers.isEmpty else { return 0 }
@@ -45,6 +45,9 @@ final class AppModel: ObservableObject {
     @Published var accessibility = false
     @Published var inputMonitoring = false
     @Published var buttonObserver = false
+    @Published var scrollFiltering = false
+    @Published var volumeIndicatorVisible = false
+    var onVolumeFeedback: (VolumeLevel) -> Void = { _ in }
     @Published var lastAction = "None"
     @Published var lastActionDate: Date?
     @Published var message = ""
@@ -74,8 +77,10 @@ final class AppModel: ObservableObject {
         if !loadIssue.isEmpty { configurationIssue = loadIssue; message = "Configuration could not load. Repair it or restore defaults and Save." }
         observedData = try? Data(contentsOf: store.url)
         executor.report = { [weak self] s in self?.record(s) }
+        executor.volumeChanged = { [weak self] level in self?.onVolumeFeedback(level) }
         driver.onStatus = { [weak self] s in self?.engineStatus = s }
         driver.onButtonObserver = { [weak self] b in self?.buttonObserver = b }
+        driver.onScrollFiltering = { [weak self] enabled in self?.scrollFiltering = enabled }
         driver.onDevices = { [weak self] list, selected in
             guard let self else { return }; self.devices = list; self.activeDevice = selected
             if selected.isEmpty { self.snapshot = EngineSnapshot() }
@@ -92,6 +97,7 @@ final class AppModel: ObservableObject {
             guard let self, self.savedConfig.enabled, !self.runtimePaused, self.legacyPIDs.isEmpty, self.calibrationAxis == nil, generation == self.driver.currentGeneration,
                   self.accessibility, self.inputMonitoring, NSWorkspace.shared.frontmostApplication?.bundleIdentifier == app,
                   self.configurationIssue.isEmpty, self.savedConfig.blockedReason(trigger.gesture, mapping: trigger.mapping, device: self.activeDevice) == nil else { return }
+            if trigger.gesture.direction.isSwipe && !self.scrollFiltering { self.record("Custom swipe paused: scroll interception unavailable"); return }
             self.executor.execute(trigger, app: app, config: self.savedConfig)
         }
     }
@@ -163,6 +169,7 @@ final class AppModel: ObservableObject {
     func checkPermissions() {
         let ax = AXIsProcessTrusted(), input = CGPreflightListenEventAccess()
         if accessibility != ax || inputMonitoring != input { accessibility = ax; inputMonitoring = input; driver.cancel(); executor.cancel() }
+        driver.setPermissions(ax && input)
         editing.observeLogin(SMAppService.mainApp.status == .enabled || SMAppService.mainApp.status == .requiresApproval)
     }
     func requestPermission(_ permission: PrivacyPermission) {
@@ -172,6 +179,12 @@ final class AppModel: ObservableObject {
         checkPermissions(); openSettings(permission.settingsURL)
     }
     func requestPermissions() { requestPermission(!accessibility ? .accessibility : .inputMonitoring) }
+    func testSystemAction(_ kind: ActionKind) {
+        guard [.missionControl,.appExpose,.showDesktop].contains(kind), accessibility else { message = "Verify Accessibility before testing system actions."; return }
+        let mapping = Mapping(action:Action(kind:kind))
+        executor.execute(GestureTrigger(gesture:Gesture(fingers:4,direction:.up),mapping:mapping,count:1),app:NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "",config:savedConfig)
+    }
+    func previewVolumeIndicator() { onVolumeFeedback(VolumeLevel(value:0.42,muted:false)) }
     func copyApplicationPath() {
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(applicationURL.path, forType: .string)
     }
@@ -276,7 +289,7 @@ final class AppModel: ObservableObject {
         Configuration issue: \(configurationIssue)
         Engine: \(engineStatus) • Enabled: \(savedConfig.enabled && !runtimePaused)
         Device: \(activeDevice) • Devices: \(devices.count)
-        Accessibility: \(accessibility) • Input Monitoring: \(inputMonitoring) • Button observation: \(buttonObserver)
+        Accessibility: \(accessibility) • Input Monitoring: \(inputMonitoring) • Button observation: \(buttonObserver) • Scroll filtering: \(scrollFiltering)
         App: \(foregroundName) (\(foreground))
         Movement scale: \(savedConfig.movementScale(for: activeDevice).title)
         Fingers: \(snapshot.fingers) • dx: \(snapshot.dxMM) \(savedDistanceUnit) • dy: \(snapshot.dyMM) \(savedDistanceUnit)
