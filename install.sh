@@ -61,7 +61,7 @@ create_launch_shortcut "$helper" "$target"
 open "$target"
 printf '\nInstalled: %s\n' "$target"
 cat <<'MESSAGE'
-In the app, complete Setup Assistant and Trackpad Calibration.
+In the app, complete Setup Assistant. Trackpad calibration is optional.
 Grant EvenBetterTouchTool.app Accessibility and Input Monitoring, then quit/reopen it.
 Enable Start at Login in General if desired. The original service is stopped;
 its configuration, LaunchAgent backups, and original binary are preserved.

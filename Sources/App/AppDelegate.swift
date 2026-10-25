@@ -51,8 +51,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             w.setContentSize(NSSize(width: 1080, height: 780)); w.minSize = NSSize(width: 940, height: 660)
             w.center(); w.isReleasedWhenClosed = false; w.delegate = self; window = w
         }
-        NSApp.activate(ignoringOtherApps: true); window?.makeKeyAndOrderFront(nil)
+        model.setSettingsVisible(true)
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
+    func windowWillClose(_ notification: Notification) { model.setSettingsVisible(false) }
     @objc private func diagnostics() { model.section = "Diagnostics"; openSettings() }
     @objc private func quit() { NSApp.terminate(nil) }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { openSettings(); return true }
@@ -65,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     private func installMainMenu() {
         let bar = NSMenu()
-        let applicationItem = NSMenuItem(), applicationMenu = NSMenu()
+        let applicationItem = NSMenuItem(), applicationMenu = NSMenu(title: "EvenBetterTouchTool")
         applicationMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
         applicationMenu.addItem(.separator())
         applicationMenu.addItem(withTitle: "Quit EvenBetterTouchTool", action: #selector(quit), keyEquivalent: "q").target = self
@@ -78,8 +81,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-        editItem.submenu = edit; bar.addItem(editItem); NSApp.mainMenu = bar
+        editItem.submenu = edit; bar.addItem(editItem)
+        let settingsItem = NSMenuItem(), settings = NSMenu(title: "Settings")
+        for section in ["Dashboard", "Gestures", "Applications", "Sensitivity", "Trackpad Calibration", "Setup Assistant", "General", "Diagnostics"] {
+            let item = settings.addItem(withTitle: section, action: #selector(showSection(_:)), keyEquivalent: "")
+            item.target = self; item.representedObject = section
+        }
+        settings.addItem(.separator())
+        settings.addItem(withTitle: "Save Changes", action: #selector(saveSettings), keyEquivalent: "s").target = self
+        settings.addItem(withTitle: "Reset Changes", action: #selector(resetSettings), keyEquivalent: "").target = self
+        settings.addItem(.separator())
+        settings.addItem(withTitle: "Close Settings", action: #selector(closeSettings), keyEquivalent: "w").target = self
+        settingsItem.submenu = settings; bar.addItem(settingsItem); NSApp.mainMenu = bar
     }
+    @objc private func showSection(_ sender: NSMenuItem) { if let section = sender.representedObject as? String { model.section = section }; openSettings() }
+    @objc private func saveSettings() { if model.canSave && model.calibrationAxis == nil { _ = model.save() } }
+    @objc private func resetSettings() { model.resetEdits() }
+    @objc private func closeSettings() { window?.performClose(nil) }
     private func installEmergencyHotkey() {
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         let pointer = Unmanaged.passUnretained(self).toOpaque()

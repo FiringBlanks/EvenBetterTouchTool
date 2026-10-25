@@ -1,15 +1,10 @@
-# EvenBetterTouchTool 2.1.1 — installer revision 1
+# EvenBetterTouchTool 2.2.0 — simpler setup and native app menus
 
-This is an installer-only update. The app binary remains version 2.1.1 with the same signing identity.
+- Opening Settings activates EvenBetterTouchTool’s macOS menu bar and temporarily shows its Dock icon. The Settings menu navigates sections and offers Save, Reset, and Close. Closing Settings returns to background operation when Menu Bar Only is enabled.
+- Calibration is optional. Unmeasured trackpads use explicitly labeled percentages of trackpad width/height. Defaults are one tab per 1% horizontal movement and one 2-point volume step per 4% vertical movement. Recognition still depends on distance, stops when stationary, and reverses without lifting.
+- Existing measured calibrations keep true millimeter thresholds. Precision calibration is collapsed by default. A clear Use Measurements button replaces the blocked confirmation switch; both measured dimensions must be 20–300 mm. Calibration edits and switching to relative units still require Save.
+- Native gesture conflict setup and OS permission checks remain required. Calibration no longer blocks custom mappings.
 
-- Installation automatically creates an EvenBetterTouchTool shortcut in the main Applications folder. If that location is unavailable or contains an unrelated item, it uses a desktop shortcut instead.
-- Repeat installations and updates keep a correct existing shortcut, pointing to the same installed app.
-- The installer registers the installed app with macOS for normal launching.
-- Uninstall removes only shortcuts that point to the app being removed, preserving unrelated apps, aliases, files, and saved settings.
-- A signed native helper is bundled, so downloaded installations do not need Xcode or AppleScript/Automation access to create the shortcut.
+This release changes the locally ad-hoc signed app binary. macOS may require removing the older privacy entry and granting this installed build Accessibility/Input Monitoring again. The installer preserves settings and measured calibrations; no native system preferences or permission grants are changed automatically.
 
-Download the ZIP, extract it, and run Install.command. Then launch from Finder → Applications → EvenBetterTouchTool, or the desktop shortcut. You can drag that icon into the Dock for one-click launching.
-
-Validation: 107 core tests, 15 app-model tests, and 14 native shortcut lifecycle tests (136 total). The shortcut tests cover fresh installs, repeat installs, replacing the target app, fallbacks/conflicts, and safe cleanup.
-
-The application remains experimental, ad-hoc signed, and unnotarized. Physical trackpad/media/audio/lifecycle acceptance tests remain outstanding. This packaging change does not modify the app’s gesture settings or code identity.
+Build, signing, smoke, metadata, and script checks pass, along with 113 core, 19 app-model, and 14 installer tests (146 total). Details are recorded in VALIDATION.md. Actual media/audio delivery, ruler accuracy, native gesture interactions, and lifecycle behavior still need the manual hardware checks. This release is experimental and not notarized.

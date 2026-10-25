@@ -115,7 +115,40 @@ import Foundation
             model.activeDevice="test"; model.accessibility=true; model.inputMonitoring=true
             model.config.safety.nativeConflictsResolved=true
             model.config.calibrations["test"]=Calibration(widthMM:100,heightMM:100,confirmed:true)
-            try expect(model.readyMappingCount==0 && model.gestureBlockers.contains(.nativeSetup) && model.gestureBlockers.contains(.calibration))
+            try expect(model.readyMappingCount==0 && model.gestureBlockers.contains(.nativeSetup) && !model.gestureBlockers.contains(.calibration))
+        }
+        test("Optional measurements are pending until Save and Reset restores relative units") { model, url in
+            model.activeDevice="test"; let before=try Data(contentsOf:url)
+            try expect(model.distanceUnit=="%")
+            model.config.calibrations["test"]=Calibration(widthMM:150,heightMM:80)
+            model.confirmCalibrationDimensions()
+            try expect(model.distanceUnit=="mm" && model.savedDistanceUnit=="%" && model.hasPendingChanges)
+            try expect(try Data(contentsOf:url)==before)
+            model.resetEdits(); try expect(model.distanceUnit=="%" && !model.hasPendingChanges)
+        }
+        test("Measurements and return to relative sensitivity require explicit Save") { model, url in
+            model.activeDevice="test"
+            model.config.calibrations["test"]=Calibration(widthMM:150,heightMM:80)
+            model.confirmCalibrationDimensions(); try expect(model.save())
+            model.activeDevice="test"; try expect(model.savedDistanceUnit=="mm")
+            let before=try Data(contentsOf:url); model.useRelativeSensitivity()
+            try expect(model.distanceUnit=="%" && model.savedDistanceUnit=="mm")
+            try expect(try Data(contentsOf:url)==before)
+            try expect(model.save() && model.savedDistanceUnit=="%")
+        }
+        test("Invalid measured dimensions remain unconfirmed") { model, _ in
+            model.activeDevice="test"; model.config.calibrations["test"]=Calibration(widthMM:150,heightMM:0)
+            model.confirmCalibrationDimensions()
+            try expect(model.distanceUnit=="%" && !model.config.calibrations["test"]!.confirmed && !model.message.isEmpty)
+        }
+        test("Settings window keeps normal app mode through foreground changes") { model, url in
+            let before=try Data(contentsOf:url)
+            try expect(!model.wantsDockAndMenu)
+            model.setSettingsVisible(true); model.foregroundChanged(); model.apply()
+            try expect(model.wantsDockAndMenu)
+            model.setSettingsVisible(false); try expect(!model.wantsDockAndMenu)
+            model.config.menuBarOnly=false; try expect(model.save() && model.wantsDockAndMenu)
+            try expect(before != Data(contentsOf:url))
         }
         print("\n\(passed) model tests passed; \(failed) failed")
         if failed > 0 { exit(1) }

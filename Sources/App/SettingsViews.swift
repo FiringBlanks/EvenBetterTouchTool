@@ -99,7 +99,7 @@ struct SettingsRoot: View {
     private var subtitle: String {
         switch model.section {
         case "Gestures": return "Three or four fingers. Your choice of action."
-        case "Trackpad Calibration": return "Physical distance, measured for your trackpad."
+        case "Trackpad Calibration": return "Live tracking and optional precision measurements."
         case "Setup Assistant": return "Resolve macOS conflicts before enabling custom input."
         case "Diagnostics": return "Live contact data and action feedback."
         default: return "A lightweight trackpad utility for macOS."
@@ -109,7 +109,7 @@ struct SettingsRoot: View {
         switch model.section {
         case "Gestures": GestureGrid(model: model)
         case "Applications": ApplicationsView(model: model)
-        case "Sensitivity": Form { SensitivityControls(value: $model.config.sensitivity) }.formStyle(.grouped)
+        case "Sensitivity": Form { SensitivityControls(value: $model.config.sensitivity, unit: model.distanceUnit) }.formStyle(.grouped)
         case "Trackpad Calibration": CalibrationView(model: model)
         case "Setup Assistant": SetupView(model: model)
         case "General": GeneralView(model: model)
@@ -126,7 +126,7 @@ struct DashboardView: View {
                 Label(model.readyMappingCount > 0 ? "Custom gestures are ready" : "Custom gestures are paused", systemImage: model.readyMappingCount > 0 ? "checkmark.circle.fill" : "pause.circle.fill")
                     .font(.headline).foregroundStyle(model.readyMappingCount > 0 ? .green : .orange)
                 ForEach(model.gestureBlockers) { blocker in Label(blocker.title, systemImage: "circle").font(.callout) }
-                HStack { Button("Open Setup Assistant") { model.section = "Setup Assistant" }; Button("Calibrate Trackpad") { model.section = "Trackpad Calibration" } }
+                HStack { Button("Open Setup Assistant") { model.section = "Setup Assistant" }; Button("Trackpad & Optional Calibration") { model.section = "Trackpad Calibration" } }
                 if model.hasPendingChanges { Text("Pending setup or calibration changes also need Save.").font(.caption).foregroundStyle(.secondary) }
             }
             Section("Permissions") { PermissionControls(model: model) }
@@ -251,7 +251,7 @@ struct MappingEditor: View {
                     Section("Movement") {
                         Toggle("Continuous", isOn: $draft.continuous).disabled(!draft.action.kind.repeatable)
                         Toggle("Override distance", isOn: Binding(get: { draft.distanceMM != nil }, set: { draft.distanceMM = $0 ? 1 : nil }))
-                        if draft.distanceMM != nil { NumericSlider(title: "Distance per action", value: Binding(get: { draft.distanceMM ?? 1 }, set: { draft.distanceMM = $0 }), range: 0.5...20, unit: "mm") }
+                        if draft.distanceMM != nil { NumericSlider(title: "Distance per action", value: Binding(get: { draft.distanceMM ?? 1 }, set: { draft.distanceMM = $0 }), range: 0.5...20, unit: model.distanceUnit) }
                         Toggle("Reverse direction", isOn: $draft.reverse)
                         NumericSlider(title: "Cooldown", value: $draft.cooldown, range: 0...5, unit: "s").help("Movement during a cooldown is discarded.")
                     }.disabled(inherited)
@@ -349,18 +349,20 @@ struct NumericSlider: View {
 
 struct SensitivityControls: View {
     @Binding var value: Sensitivity
+    var unit: String
     var body: some View {
         Section("Continuous movement") {
-            NumericSlider(title:"Horizontal interval",value:$value.horizontalMM,range:0.5...20,unit:"mm")
-            NumericSlider(title:"Vertical interval",value:$value.verticalMM,range:0.5...20,unit:"mm")
+            Text(unit == "mm" ? "Measured distance on the selected trackpad." : "No calibration needed. Distances are percentages of the trackpad’s width or height.").font(.caption).foregroundStyle(.secondary)
+            NumericSlider(title:"Horizontal interval",value:$value.horizontalMM,range:0.5...20,unit:unit)
+            NumericSlider(title:"Vertical interval",value:$value.verticalMM,range:0.5...20,unit:unit)
             NumericSlider(title:"Volume step",value:$value.volumePercent,range:0.1...20,unit:"%")
         }
         Section("Recognition") {
             NumericSlider(title:"Tap duration",value:$value.tapDuration,range:0.05...1,unit:"s")
-            NumericSlider(title:"Tap tolerance",value:$value.tapToleranceMM,range:0.1...5,unit:"mm")
-            NumericSlider(title:"Swipe activation",value:$value.activationMM,range:0.1...10,unit:"mm")
+            NumericSlider(title:"Tap tolerance",value:$value.tapToleranceMM,range:0.1...5,unit:unit)
+            NumericSlider(title:"Swipe activation",value:$value.activationMM,range:0.1...10,unit:unit)
             NumericSlider(title:"Diagonal rejection",value:$value.diagonalRatio,range:1.05...4,unit:"×")
-            NumericSlider(title:"Jitter tolerance",value:$value.jitterMM,range:0...0.5,unit:"mm")
+            NumericSlider(title:"Jitter tolerance",value:$value.jitterMM,range:0...0.5,unit:unit)
         }
     }
 }
@@ -399,7 +401,7 @@ struct ApplicationsView: View {
                     Button("Restore App Defaults") { let p = model.config.profiles[index]; model.config.profiles[index] = Configuration.defaultProfile(p.bundleID,name:p.name) }
                 }
                 if model.config.profiles[index].sensitivity != nil {
-                    SensitivityControls(value: Binding(get: { model.config.profiles[index].sensitivity ?? model.config.sensitivity }, set: { model.config.profiles[index].sensitivity = $0 }))
+                    SensitivityControls(value: Binding(get: { model.config.profiles[index].sensitivity ?? model.config.sensitivity }, set: { model.config.profiles[index].sensitivity = $0 }), unit: model.distanceUnit)
                 }
             }
         }.formStyle(.grouped)
@@ -412,39 +414,59 @@ struct ApplicationsView: View {
 struct CalibrationView: View {
     @ObservedObject var model: AppModel
     @State private var distance = 30.0
-    private var calibration: Binding<Calibration> { Binding(get: { model.config.calibrations[model.activeDevice] ?? Calibration() }, set: { model.config.calibrations[model.activeDevice] = $0 }) }
+    @State private var showPrecision = false
+    private var calibration: Binding<Calibration> {
+        Binding(get: { model.config.calibrations[model.activeDevice] ?? Calibration() }, set: { value in
+            var updated = value
+            let previous = model.config.calibrations[model.activeDevice] ?? Calibration()
+            if previous.widthMM != value.widthMM || previous.heightMM != value.heightMM { updated.confirmed = false }
+            model.config.calibrations[model.activeDevice] = updated
+        })
+    }
+    private var deviceUnavailable: Bool { model.activeDevice.isEmpty || (!model.config.selectedDevice.isEmpty && model.config.selectedDevice != model.activeDevice) }
     var body: some View {
         Form {
+            Section("Trackpad sensitivity") {
+                Label(calibration.wrappedValue.valid ? "Using measured millimeters" : "Ready to use without calibration", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                Text("Calibration is optional. By default, one tab switch uses 1% of the trackpad’s width; one volume step uses 4% of its height. Adjust these intervals in Sensitivity. Measure only if you want exact millimeters.")
+                Button("Adjust Sensitivity") { model.section = "Sensitivity" }
+                if calibration.wrappedValue.valid {
+                    Button("Use Relative Sensitivity") { model.useRelativeSensitivity() }.disabled(deviceUnavailable)
+                    Text("Click Save to apply the change. The interval numbers stay the same; their unit changes from mm to %.").font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Section("Selected device") {
                 Picker("Trackpad", selection: Binding(get: { model.config.selectedDevice.isEmpty ? model.activeDevice : model.config.selectedDevice }, set: { model.config.selectedDevice = $0 })) { Text("Select trackpad").tag(""); ForEach(model.devices) { Text($0.name).tag($0.id) } }
-                if let device = model.devices.first(where: { $0.id == model.activeDevice }) {
-                    LabeledContent("Sensor surface (raw units)",value:"\(device.rawWidth) × \(device.rawHeight)")
-                }
-                Text("Raw sensor dimensions and absolute coordinates have no documented millimeter unit. This app never treats them as physical dimensions. Calibrate X and Y separately, or enter measured active-surface dimensions. Calibration is stored per device ID.").font(.caption).foregroundStyle(.secondary)
+                if deviceUnavailable { Text("Connect a trackpad, or Save your device selection first.").foregroundStyle(.secondary) }
             }
             Section("Live test area") {
                 TrackpadCanvas(contacts:model.snapshot.contacts).frame(height:160)
                 LabeledContent("Touching fingers",value:String(model.snapshot.fingers))
-                Text("Finger positions are normalized from 0 to 1. Lift all fingers between trials.").font(.caption).foregroundStyle(.secondary)
+                Text("Move one or more fingers to check tracking. This test needs no confirmation or calibration.").font(.caption).foregroundStyle(.secondary)
             }
-            Section("Calibration wizard") {
-                Text("Use a ruler to mark a known travel distance on the trackpad. Begin a trial, place ONE finger, move straight along the chosen axis by that distance, then lift. Custom actions pause during measurement.")
-                HStack {
-                    TextField("Measured travel (mm)",value:$distance,format:.number).frame(width:180)
-                    Button("Measure X") { model.startCalibration("X") }.disabled(model.activeDevice.isEmpty || (!model.config.selectedDevice.isEmpty && model.config.selectedDevice != model.activeDevice))
-                    Button("Measure Y") { model.startCalibration("Y") }.disabled(model.activeDevice.isEmpty || (!model.config.selectedDevice.isEmpty && model.config.selectedDevice != model.activeDevice))
-                }
-                if let axis = model.calibrationAxis {
-                    LabeledContent("Measuring \(axis)",value:"\(model.calibrationTravel.formatted(.number.precision(.fractionLength(4)))) normalized")
-                    HStack { Button("Use Measurement") { model.finishCalibration(distance:distance) }; Button("Cancel") { model.cancelCalibration() } }
+            Section {
+                DisclosureGroup("Precision calibration (optional)", isExpanded: Binding(get: { showPrecision || model.calibrationAxis != nil }, set: { showPrecision = $0 || model.calibrationAxis != nil })) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Enter the measured active-surface dimensions, then click Use Measurements and Save. Both dimensions must be between 20 and 300 mm.").font(.callout)
+                        HStack { Text("Active width (mm)"); Spacer(); TextField("Width",value:calibration.widthMM,format:.number).frame(width:90).accessibilityLabel("Measured active width in millimeters") }
+                        HStack { Text("Active height (mm)"); Spacer(); TextField("Height",value:calibration.heightMM,format:.number).frame(width:90).accessibilityLabel("Measured active height in millimeters") }
+                        Button("Use Measurements") { model.confirmCalibrationDimensions() }.disabled(!calibration.wrappedValue.dimensionsValid || model.calibrationAxis != nil)
+                        if calibration.wrappedValue.valid { Text("Measurements staged. Click Save to apply; Reset discards edits.").font(.caption).foregroundStyle(.secondary) }
+                        Divider()
+                        Text("Alternatively, measure each axis with one finger: start a trial, move a ruler-measured distance in a straight line, then lift.").font(.callout)
+                        HStack {
+                            TextField("Travel (mm)",value:$distance,format:.number).frame(width:150).accessibilityLabel("Measured finger travel in millimeters")
+                            Button("Measure X") { model.startCalibration("X") }.disabled(model.calibrationAxis != nil)
+                            Button("Measure Y") { model.startCalibration("Y") }.disabled(model.calibrationAxis != nil)
+                        }
+                        if let axis = model.calibrationAxis {
+                            Text(model.calibrationInstruction).font(.callout)
+                            LabeledContent("Measuring \(axis)",value:"\((model.calibrationTravel*100).formatted(.number.precision(.fractionLength(1))))% of axis")
+                            HStack { Button("Use Trial") { model.finishCalibration(distance:distance) }; Button("Cancel Trial") { model.cancelCalibration() } }
+                        }
+                    }.padding(.top, 8).disabled(deviceUnavailable)
                 }
             }
-            Section("Physical coordinate scale") {
-                HStack { Text("Active width (mm)"); Spacer(); TextField("Width",value:calibration.widthMM,format:.number).frame(width:90) }
-                HStack { Text("Active height (mm)"); Spacer(); TextField("Height",value:calibration.heightMM,format:.number).frame(width:90) }
-                Toggle("I measured and verified both axes",isOn:calibration.confirmed).disabled(!((20...300).contains(calibration.wrappedValue.widthMM) && (20...300).contains(calibration.wrappedValue.heightMM)))
-                Label(calibration.wrappedValue.valid ? "Calibrated — distance gestures available" : "Not calibrated — custom mappings paused",systemImage:calibration.wrappedValue.valid ? "checkmark.circle" : "ruler").foregroundStyle(calibration.wrappedValue.valid ? .green : .orange)
-            }.disabled(model.activeDevice.isEmpty || (!model.config.selectedDevice.isEmpty && model.config.selectedDevice != model.activeDevice))
         }.formStyle(.grouped)
     }
 }
@@ -483,9 +505,9 @@ struct SetupView: View {
                 Toggle("I disabled Look Up, Tap to click, and three-finger dragging",isOn:$model.config.safety.tapConflictsResolved)
                 Text("Taps also require a working mouse-button observer. Physical click remapping is disabled. No mouse events are swallowed.").font(.caption).foregroundStyle(.secondary)
             }
-            Section("4 · Verify system shortcuts and calibrate") {
-                Text("In Keyboard → Keyboard Shortcuts → Mission Control, enable and verify Mission Control and Application windows. The app reads explicit configured shortcuts when available. If none can be read, use General → System Shortcuts to confirm a fallback. Then calibrate the trackpad.")
-                HStack { Button("Keyboard Settings") { model.openSettings(keyboardPane) }; Button("System Shortcuts") { model.section = "General" }; Button("Calibrate") { model.section = "Trackpad Calibration" } }
+            Section("4 · Verify system shortcuts") {
+                Text("In Keyboard → Keyboard Shortcuts → Mission Control, enable and verify Mission Control and Application windows. The app reads explicit configured shortcuts when available. If none can be read, use General → System Shortcuts to confirm a fallback. Calibration is optional; relative sensitivity works without measurements.")
+                HStack { Button("Keyboard Settings") { model.openSettings(keyboardPane) }; Button("System Shortcuts") { model.section = "General" }; Button("Optional Calibration") { model.section = "Trackpad Calibration" } }
             }
             Section("Optional · Reassign four-finger horizontal swipes") {
                 Text("Leave this OFF for native desktop switching. To customize these swipes, first turn OFF “Swipe between full-screen applications” in Trackpad settings. Native pass-through mappings always send no synthetic command.")
@@ -559,7 +581,7 @@ struct DiagnosticsView: View {
             Section("Live contacts") {
                 TrackpadCanvas(contacts:model.snapshot.contacts).frame(height:140)
                 LabeledContent("Fingers",value:String(model.snapshot.fingers))
-                LabeledContent("Movement (calibrated)",value:"X \(model.snapshot.dxMM.formatted(.number.precision(.fractionLength(3)))) mm • Y \(model.snapshot.dyMM.formatted(.number.precision(.fractionLength(3)))) mm")
+                LabeledContent("Movement (\(model.savedConfig.movementScale(for: model.activeDevice).title))",value:"X \(model.snapshot.dxMM.formatted(.number.precision(.fractionLength(3)))) \(model.savedDistanceUnit) • Y \(model.snapshot.dyMM.formatted(.number.precision(.fractionLength(3)))) \(model.savedDistanceUnit)")
                 ForEach(model.snapshot.contacts,id:\.id) { c in Text("#\(c.id): x=\(c.x.formatted(.number.precision(.fractionLength(4))))  y=\(c.y.formatted(.number.precision(.fractionLength(4))))").font(.system(.caption,design:.monospaced)) }
             }
             Section("Recognition and actions") {
@@ -568,7 +590,7 @@ struct DiagnosticsView: View {
                 LabeledContent("Last action / result",value:model.lastAction)
                 LabeledContent("Last action timestamp",value:model.lastActionDate?.formatted(date:.omitted,time:.standard) ?? "None")
                 LabeledContent("Foreground app",value:model.foreground)
-                LabeledContent("Sensitivity",value:"X \(model.savedConfig.sensitivity(for:model.foreground).horizontalMM) mm • Y \(model.savedConfig.sensitivity(for:model.foreground).verticalMM) mm")
+                LabeledContent("Sensitivity",value:"X \(model.savedConfig.sensitivity(for:model.foreground).horizontalMM) \(model.savedDistanceUnit) • Y \(model.savedConfig.sensitivity(for:model.foreground).verticalMM) \(model.savedDistanceUnit)")
                 LabeledContent("Device",value:model.engineStatus)
             }
             Section("Diagnostics log") {

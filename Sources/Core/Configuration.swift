@@ -72,7 +72,22 @@ struct Calibration: Codable, Equatable {
     var widthMM = 0.0
     var heightMM = 0.0
     var confirmed = false
-    var valid: Bool { confirmed && widthMM >= 20 && widthMM <= 300 && heightMM >= 20 && heightMM <= 300 }
+    var dimensionsValid: Bool { widthMM.isFinite && heightMM.isFinite && (20...300).contains(widthMM) && (20...300).contains(heightMM) }
+    var valid: Bool { confirmed && dimensionsValid }
+}
+/// Unmeasured devices use percentages of each axis, never assumed millimeters.
+/// Existing *MM configuration keys are retained for profile compatibility.
+struct MovementScale {
+    var width: Double
+    var height: Double
+    var measured: Bool
+    var unit: String { measured ? "mm" : "%" }
+    var title: String { measured ? "Measured millimeters" : "Relative · % of trackpad" }
+    init(_ calibration: Calibration?) {
+        measured = calibration?.valid == true
+        width = measured ? calibration!.widthMM : 100
+        height = measured ? calibration!.heightMM : 100
+    }
 }
 struct AppProfile: Codable, Equatable, Identifiable {
     var bundleID: String
@@ -140,13 +155,13 @@ struct Configuration: Codable, Equatable {
         return m
     }
     func sensitivity(for app: String) -> Sensitivity { profile(app)?.sensitivity ?? sensitivity }
+    func movementScale(for device: String) -> MovementScale { MovementScale(calibrations[device]) }
     func blockedReason(_ g: Gesture, mapping: Mapping, device: String) -> String? {
         if !enabled { return "Engine disabled" }
         if !mapping.enabled || mapping.action.kind == .none { return "No action" }
         if mapping.action.kind == .native { return "Native gesture: observing only" }
         if g.direction == .click { return "Physical click remapping is unsupported on this build" }
         if mapping.action.kind == .notificationCenter { return "Notification Center: assign your configured keyboard shortcut instead" }
-        if calibrations[device]?.valid != true { return "Calibrate the selected trackpad first" }
         if !safety.nativeConflictsResolved { return "Complete native gesture conflict setup" }
         if g.fingers == 4 && [.left, .right].contains(g.direction) && !safety.nativeHorizontalDisabled { return "Disable native desktop swipes before reassigning them" }
         if g.direction == .tap && !safety.tapConflictsResolved { return "Complete tap conflict setup first" }

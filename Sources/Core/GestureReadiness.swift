@@ -37,7 +37,6 @@ enum GestureReadiness {
         if !inputMonitoring { result.append(.inputMonitoring) }
         if device.isEmpty { result.append(.trackpad) }
         if !config.safety.nativeConflictsResolved { result.append(.nativeSetup) }
-        if !device.isEmpty && config.calibrations[device]?.valid != true { result.append(.calibration) }
         if configurationError { result.append(.configuration) }
         if legacyDaemon { result.append(.legacyDaemon) }
         if calibrating { result.append(.calibrating) }

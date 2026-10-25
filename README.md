@@ -1,16 +1,16 @@
 # EvenBetterTouchTool — macOS trackpad customization
 
-A free, MIT-licensed native SwiftUI menu bar app built from [firedev/threefinger](https://github.com/firedev/threefinger). Customize three- and four-finger gestures with app profiles, calibrated continuous movement, media controls, Core Audio volume, and a graphical setup/diagnostics interface. No subscriptions, dependencies, analytics, or network updater.
+A free, MIT-licensed native SwiftUI menu bar app built from [firedev/threefinger](https://github.com/firedev/threefinger). Customize three- and four-finger gestures with app profiles, continuous relative or calibrated movement, media controls, Core Audio volume, and a graphical setup/diagnostics interface. No subscriptions, dependencies, analytics, or network updater.
 
 **Requires macOS 14+, Apple Silicon, and Xcode Command Line Tools to build.** The raw contact driver uses Apple's private MultitouchSupport framework; future OS compatibility is not guaranteed. Physical multi-finger click remapping is disabled. See [compatibility and API investigation](docs/COMPATIBILITY.md) before enabling custom input.
 
 ## Download and change settings
 
-Download the [Apple Silicon release ZIP](https://github.com/FiringBlanks/EvenBetterTouchTool/releases/download/v2.1.1-installer.1/EvenBetterTouchTool-2.1.1-arm64.zip) from [GitHub Releases](https://github.com/FiringBlanks/EvenBetterTouchTool/releases). Extract it and run `Install.command` (or `./install.sh` in Terminal). The installer places the app in your personal Applications folder, creates a launch shortcut in the main Applications folder (or on the desktop if that folder is unavailable), and safely stops the original threefinger service if present. The app is also included directly in the ZIP.
+Download the [Apple Silicon release ZIP](https://github.com/FiringBlanks/EvenBetterTouchTool/releases/download/v2.2.0/EvenBetterTouchTool-2.2.0-arm64.zip) from [GitHub Releases](https://github.com/FiringBlanks/EvenBetterTouchTool/releases). Extract it and run `Install.command` (or `./install.sh` in Terminal). The installer places the app in your personal Applications folder, creates a launch shortcut in the main Applications folder (or on the desktop if that folder is unavailable), and safely stops the original threefinger service if present. The app is also included directly in the ZIP.
 
 After installation, open **Finder → Applications → EvenBetterTouchTool** (or the desktop shortcut). Drag that icon into the Dock if you want one-click access. The shortcut opens the installed app.
 
-Open **EvenBetterTouchTool** from Applications. Click its **hand icon in the menu bar → Open Settings**. In **Gestures**, choose Global or an app profile, then click a gesture cell to change its action. Use **Applications** for per-app overrides and **Sensitivity** for distance/tap settings. Edits stay pending until you click **Save**. **Reset** discards pending edits. Complete Setup Assistant, permissions, and calibration before using custom input.
+Open **EvenBetterTouchTool** from Applications. Click its **hand icon in the menu bar → Open Settings**. In **Gestures**, choose Global or an app profile, then click a gesture cell to change its action. Use **Applications** for per-app overrides and **Sensitivity** for distance/tap settings. Edits stay pending until you click **Save**. **Reset** discards pending edits. Complete Setup Assistant and permissions before using custom input. Calibration is optional.
 
 This release is **experimental, locally ad-hoc signed, and not notarized**. Physical trackpad acceptance tests are still pending; see the compatibility and test documents below. macOS may require you to explicitly allow the downloaded app through its normal Privacy & Security controls. The installer does not bypass Gatekeeper or change privacy/gesture preferences.
 
@@ -37,8 +37,8 @@ If no gestures work or a permission list says “No Items”, follow the [step-b
 1. Grant **EvenBetterTouchTool.app** Accessibility and Input Monitoring in System Settings → Privacy & Security. Use Dashboard or Setup Assistant to open/request these permissions. Quit/reopen after an Input Monitoring change. The old CLI daemon's grants do not transfer.
 2. Complete **Setup Assistant**: turn native Mission Control/App Exposé trackpad swipes OFF, retain four-finger horizontal full-screen switching, restrict page swipes to two fingers or Off, and turn three-finger dragging OFF. Custom taps additionally require Look Up and Tap to click OFF. The full table and reasoning are in [COMPATIBILITY.md](docs/COMPATIBILITY.md). The app does not alter system preferences or suppress native gestures automatically.
 3. Verify keyboard shortcuts for Mission Control and Application windows. If the app cannot read a configured shortcut, set a user-verified fallback under General → System Shortcuts. No Control–Arrow shortcut is silently assumed.
-4. Open **Trackpad Calibration**. Calibrate X and Y separately using ruler-measured travel, or enter measured active-surface dimensions. Raw normalized/sensor coordinates are not millimeters. No custom gesture runs until the selected device is calibrated and native conflict setup is confirmed.
-5. Click **Save** to apply setup/calibration. Enable **Start at Login** under General and click Save if desired. macOS Login Items manages startup; no second LaunchAgent is installed.
+4. Start using gestures with **relative sensitivity**: intervals are a percentage of trackpad width/height, with no measurement required. In Sensitivity, adjust how far you move for each action. For exact millimeter thresholds, optionally expand **Trackpad Calibration → Precision calibration**, enter both measured dimensions and click **Use Measurements**, or measure X/Y with single-finger trials. Click Save. Raw normalized coordinates are never silently treated as millimeters.
+5. Click **Save** to apply setup. Enable **Start at Login** under General and click Save if desired. macOS Login Items manages startup; no second LaunchAgent is installed.
 
 **Emergency disable: Control–Option–Command–Escape.** The menu bar also provides Enable/Disable, Open Settings, Diagnostics, and Quit. If the emergency shortcut cannot register because another application owns it, the app warns you; use the menu bar switch.
 
@@ -46,22 +46,22 @@ If no gestures work or a permission list says “No Items”, follow the [step-b
 
 | Gesture | Default action |
 | --- | --- |
-| Three-finger left/right | Previous/next tab in Chrome and Finder profiles only; 1 mm per step |
+| Three-finger left/right | Previous/next tab in Chrome and Finder profiles only; 1% of trackpad width per step (1 mm when calibrated) |
 | Three-finger up/down | Mission Control / App Exposé, once per contact session |
 | Three-finger tap | Dedicated system Play/Pause media command |
 | Three-finger physical click | Middle click is the intended action but mapping is **disabled / unsupported** |
 | Four-finger left/right | Native desktop gesture; sends no synthetic event |
-| Four-finger up/down | Volume up/down, 2 percentage points per 4 mm |
+| Four-finger up/down | Volume up/down, 2 percentage points per 4% of trackpad height (4 mm when calibrated) |
 | Four-finger tap | Mute/unmute |
 | Four-finger physical click | Unassigned and unsupported |
 
 The defaults describe a fresh configuration. Migration preserves your existing explicit shortcut mappings as global one-shot sequences, including old Chrome/Finder overrides; it backs up the original JSON first. An old normalized threshold cannot be converted to mm without calibration and stays recorded in that backup. Restore an individual cell or app profile to adopt the new defaults.
 
-Continuous gestures retain fractional intervals, reverse without lifting, and stop when movement stops. Distance intervals are adjustable from 0.5–20 mm, globally, per app, or per mapping. Reversing discards the old direction's remaining fraction and starts at the turning point. There is no timed repeat or momentum. Exceptional input bursts are limited and discarded rather than replayed later; see compatibility notes.
+Continuous gestures retain fractional intervals, reverse without lifting, and stop when movement stops. Distance intervals are adjustable from 0.5–20% of the relevant trackpad axis (0.5–20 mm when calibrated), globally, per app, or per mapping. Reversing discards the old direction's remaining fraction and starts at the turning point. There is no timed repeat or momentum. Exceptional input bursts are limited and discarded rather than replayed later; see compatibility notes.
 
 ## Settings and action library
 
-The native settings window provides Dashboard, a 2×6 gesture grid with cell editors, installed-app profiles/icons, Sensitivity, Trackpad Calibration with live contacts, Setup Assistant, General, and Diagnostics. Native controls support light/dark appearances and accessibility labels. The app lives in the menu bar with no permanent Dock icon by default; General can opt into Dock visibility.
+The native settings window provides Dashboard, a 2×6 gesture grid with cell editors, installed-app profiles/icons, Sensitivity, Trackpad Calibration with live contacts, Setup Assistant, General, and Diagnostics. Native controls support light/dark appearances and accessibility labels. The app lives in the menu bar with no permanent Dock icon by default; Opening Settings temporarily shows the Dock icon and activates the app’s own menu bar, with Settings navigation, Save, Reset, and Close. Closing Settings returns to menu bar only operation; General can opt into permanent Dock visibility.
 
 Profiles resolve **enabled application override → global mapping → no action/native pass-through**. A disabled app profile falls back to global; a disabled cell inside an enabled profile explicitly blocks that gesture. Unedited app cells inherit global mappings. Profile sensitivity is independently configurable. Additional applications initially have no tab behavior until you add a profile or global action.
 
@@ -79,7 +79,7 @@ Click the hand in the **Fingers** column to stage enabling/disabling the entire 
 
 Valid external JSON edits reload within two seconds. If an external edit arrives while drafts exist, the app retains them and asks you to Reset and review the saved configuration before saving, preventing accidental overwrites. Invalid external edits pause custom actions. Imported local consent/calibration is cleared, and imports remain pending until Save. Export writes only the saved configuration. **Emergency disable is immediate and temporary**; it never writes settings implicitly. Click Save to persist a disabled master switch.
 
-Diagnostics displays raw contacts, calibrated movement, recognized gesture, block/cancellation reason, action/result, foreground app, sensitivity, timestamp, and device status. Optional action logging is bounded to 250 in-memory entries; no typed content is logged. Copy Diagnostics puts current diagnostic information on the clipboard only when requested.
+Diagnostics displays raw contacts, movement with explicit % or mm units, recognized gesture, block/cancellation reason, action/result, foreground app, sensitivity, timestamp, and device status. Optional action logging is bounded to 250 in-memory entries; no typed content is logged. Copy Diagnostics puts current diagnostic information on the clipboard only when requested.
 
 ## Build, signing, and development
 
@@ -121,7 +121,7 @@ Add new actions through `ActionKind`, `ActionPlanner`, the executor, and paramet
 
 See [build/validation results and the file manifest](docs/VALIDATION.md). Run `make check` for automated results and [the manual acceptance checklist](docs/MANUAL-TESTS.md) for hardware testing. Tests exercise synthetic three/four-finger frames, directions, continuous distance, fractions/reversal, stationary input, taps/physical-button cancellation, invalid frames, profiles, action plans/media encodings/volume clamping, persistence/migration, and conflict gates. These are **not proof of hardware gesture accuracy or media delivery**.
 
-- No actions: inspect Dashboard for permission, calibration, setup, selected-device, and legacy-daemon state. Lift all fingers after any app/settings change. Use Diagnostics for the exact block reason.
+- No actions: inspect Dashboard for permission, setup, selected-device, and legacy-daemon state. Lift all fingers after any app/settings change. Use Diagnostics for the exact block reason.
 - No contacts: check Input Monitoring for the installed app, quit/reopen, then Reconnect Trackpad. A broken private ABI fails safely and may require a driver update.
 - Double native actions: complete the conflict table; the app cannot suppress native gestures that remain enabled. Do not run the old daemon alongside the app.
 - Finder does nothing: use multiple tabs in the focused Finder window. If the OS exposes a different accessibility hierarchy, the guard deliberately does nothing.

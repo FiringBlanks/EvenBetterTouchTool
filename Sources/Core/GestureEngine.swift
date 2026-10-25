@@ -51,7 +51,7 @@ final class GestureEngine {
         let c = frame.contacts
         guard c.count <= 16, Set(c.map(\.id)).count == c.count, c.allSatisfy({ $0.x.isFinite && $0.y.isFinite && (0...1).contains($0.x) && (0...1).contains($0.y) }) else { cancel("Invalid contact frame"); return [] }
         let sensitivity = config.sensitivity(for: app)
-        let calibration = config.calibrations[device] ?? Calibration()
+        let scale = config.movementScale(for: device)
         if c.isEmpty {
             defer { reset() }
             guard !start.isEmpty, !cancelled, !clicked, !swiped, frame.time - startTime <= sensitivity.tapDuration,
@@ -91,13 +91,13 @@ final class GestureEngine {
         guard abs(x - lastX) <= 0.2, abs(y - lastY) <= 0.2 else { cancel("Implausible coordinate jump"); return [] }
         for finger in c {
             if let origin = start.first(where: { $0.id == finger.id }) {
-                maxMovement = max(maxMovement, hypot((finger.x-origin.x)*calibration.widthMM, (finger.y-origin.y)*calibration.heightMM))
+                maxMovement = max(maxMovement, hypot((finger.x-origin.x)*scale.width, (finger.y-origin.y)*scale.height))
             }
         }
-        let totalX = (x-originX)*calibration.widthMM, totalY = (y-originY)*calibration.heightMM
+        let totalX = (x-originX)*scale.width, totalY = (y-originY)*scale.height
         snapshot.dxMM = totalX; snapshot.dyMM = totalY
         if hypot(totalX, totalY) >= sensitivity.activationMM || maxMovement > sensitivity.tapToleranceMM+1e-7 { swiped = true }
-        guard calibration.valid, frame.time - startTime >= 0.04 else { return [] }
+        guard frame.time - startTime >= 0.04 else { return [] }
         if axis == nil {
             let ax = abs(totalX), ay = abs(totalY)
             guard max(ax,ay)+1e-7 >= sensitivity.activationMM else { return [] }
@@ -106,7 +106,7 @@ final class GestureEngine {
             else { snapshot.reason = "Diagonal movement rejected"; return [] }
         }
         let horizontal = axis!
-        let movement = horizontal ? (x-lastX)*calibration.widthMM : (y-lastY)*calibration.heightMM
+        let movement = horizontal ? (x-lastX)*scale.width : (y-lastY)*scale.height
         guard abs(movement)+1e-7 >= sensitivity.jitterMM, abs(movement) > 1e-9 else { return [] }
         lastX = x; lastY = y
         let sign = movement > 0 ? 1.0 : -1.0

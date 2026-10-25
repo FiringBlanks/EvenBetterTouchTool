@@ -7,7 +7,13 @@ struct InstalledApplication: Identifiable {
     var id: String; var name: String; var url: URL
 }
 final class AppModel: ObservableObject {
-    static let version = "2.1.1"
+    static let version = "2.2.0"
+    private(set) var settingsVisible = false
+    var distanceUnit: String { config.movementScale(for: activeDevice).unit }
+    var savedDistanceUnit: String { savedConfig.movementScale(for: activeDevice).unit }
+    var wantsDockAndMenu: Bool { settingsVisible || !savedConfig.menuBarOnly }
+    func setSettingsVisible(_ visible: Bool) { settingsVisible = visible; refreshActivationPolicy() }
+    private func refreshActivationPolicy() { NSApp?.setActivationPolicy(wantsDockAndMenu ? .regular : .accessory) }
     @Published var editing: SettingsDraft
     var config: Configuration { get { editing.config } set { editing.config = newValue } }
     var savedConfig: Configuration { editing.saved }
@@ -48,6 +54,7 @@ final class AppModel: ObservableObject {
     @Published var calibrationAxis: String?
     @Published var calibrationTravel = 0.0
     @Published var calibrationOffAxis = 0.0
+    var calibrationInstruction: String { calibrationTrial?.instruction ?? "" }
     @Published var legacyPIDs: [Int32] = []
     private var calibrationTrial: CalibrationTrial?
     private var observedData: Data?
@@ -105,7 +112,7 @@ final class AppModel: ObservableObject {
         var effective = savedConfig
         if runtimePaused || !legacyPIDs.isEmpty || calibrationAxis != nil || !configurationIssue.isEmpty { effective.enabled = false }
         driver.configure(effective, app: foreground)
-        if let app = NSApp { app.setActivationPolicy(savedConfig.menuBarOnly ? .accessory : .regular) }
+        refreshActivationPolicy()
     }
     @discardableResult func save() -> Bool {
         do {
@@ -241,7 +248,15 @@ final class AppModel: ObservableObject {
     func restoreDefaults() {
         config = .defaults; config.selectedDevice = activeDevice
     }
-    func startCalibration(_ axis: String) { calibrationTrial = CalibrationTrial(horizontal: axis == "X"); calibrationTravel = 0; calibrationOffAxis = 0; calibrationAxis = axis; apply() }
+    func confirmCalibrationDimensions() {
+        guard !activeDevice.isEmpty, var calibration = config.calibrations[activeDevice], calibration.dimensionsValid else {
+            message = "Enter both measured dimensions between 20 and 300 mm, or keep using relative sensitivity."
+            return
+        }
+        calibration.confirmed = true; config.calibrations[activeDevice] = calibration
+    }
+    func useRelativeSensitivity() { config.calibrations.removeValue(forKey: activeDevice) }
+    func startCalibration(_ axis: String) { calibrationTrial = CalibrationTrial(horizontal: axis == "X", waitForLift: true); calibrationTravel = 0; calibrationOffAxis = 0; calibrationAxis = axis; apply() }
     func finishCalibration(distance: Double) {
         guard let axis = calibrationAxis, let trial = calibrationTrial else { return }
         let full: Double
@@ -263,7 +278,8 @@ final class AppModel: ObservableObject {
         Device: \(activeDevice) • Devices: \(devices.count)
         Accessibility: \(accessibility) • Input Monitoring: \(inputMonitoring) • Button observation: \(buttonObserver)
         App: \(foregroundName) (\(foreground))
-        Fingers: \(snapshot.fingers) • dx: \(snapshot.dxMM) mm • dy: \(snapshot.dyMM) mm
+        Movement scale: \(savedConfig.movementScale(for: activeDevice).title)
+        Fingers: \(snapshot.fingers) • dx: \(snapshot.dxMM) \(savedDistanceUnit) • dy: \(snapshot.dyMM) \(savedDistanceUnit)
         Contacts: \(snapshot.contacts)
         Gesture: \(snapshot.gesture) • Reason: \(snapshot.reason)
         Action: \(lastAction) • Last action: \(lastActionDate?.description ?? "None")

@@ -22,7 +22,7 @@ Apple references: [Input Monitoring](https://support.apple.com/guide/mac-help/mc
 Permissions alone do not remove the other safety gates:
 
 - In Setup Assistant, manually resolve the listed native gesture conflicts in macOS. Only then check the corresponding confirmations and click **Save**. The app cannot suppress native gestures automatically.
-- In Trackpad Calibration, measure the active X/Y scales with a ruler or supply measured active-surface dimensions. Click **Use Measurement** after each trial, then **Save**. Normalized/raw sensor coordinates are not millimeters; no device dimensions are assumed.
+- Calibration is optional. Without measurements, sensitivity and movement display percentages of each trackpad axis. For exact millimeters, expand Precision calibration, enter measured active-surface dimensions and choose **Use Measurements**, then **Save**; alternatively measure X/Y separately. No device dimensions are assumed.
 - Custom taps also require their separate native tap conflict confirmation and a working physical-button observer.
 - Settings and measurements remain pending until Save. The sidebar and Dashboard report saved readiness, even while an unsaved master switch says Enabled.
 - Default tab navigation applies to Chrome and Finder profiles. Original legacy mappings are preserved; restore the desired profile/cells and Save to adopt continuous tab actions.

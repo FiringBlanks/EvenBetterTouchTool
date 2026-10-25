@@ -3,14 +3,14 @@
 ## Artifacts
 
 - Standalone Apple Silicon application: `build/EvenBetterTouchTool.app`
-- Installable archive: `build/EvenBetterTouchTool-2.1.1-arm64.zip`
-- Archive checksum: `build/EvenBetterTouchTool-2.1.1-arm64.zip.sha256`
-- Raw local build/test log: `build/permissions-check.log`
+- Installable archive: `build/EvenBetterTouchTool-2.2.0-arm64.zip`
+- Archive checksum: `build/EvenBetterTouchTool-2.2.0-arm64.zip.sha256`
+- Raw local build/test log: `build/settings-calibration-check.log`
 - Double-click installer: `Install.command`
 - Local installer: `install.sh` (inspect using `./install.sh --dry-run` first)
 - Uninstaller: `uninstall.sh`
 
-The app is ad-hoc signed with stable bundle ID `org.evenbettertouchtool.app`. It is not notarized. The renamed app was installed locally in the current user’s Applications folder using the provided installer. The original same-user daemon was stopped; its configuration and LaunchAgent were backed up. The installed settings window was opened, the new branding was verified, and the driver enumerated the selected trackpad. No permission grant, native gesture preference change, login registration, or custom action was performed; setup/calibration and physical acceptance tests remain outstanding.
+The app is ad-hoc signed with stable bundle ID `org.evenbettertouchtool.app`. It is not notarized. The renamed app was installed locally in the current user’s Applications folder using the provided installer. The original same-user daemon was stopped; its configuration and LaunchAgent were backed up. The installed settings window was opened, the new branding was verified, and the driver enumerated the selected trackpad. No permission grant, native gesture preference change, login registration, or custom action was performed; native setup and physical acceptance tests remain outstanding; calibration is optional.
 
 ## Verified results
 
@@ -19,7 +19,7 @@ Build host: Apple Silicon, macOS 26.6.2, Swift 6.3.2, Command Line Tools. Target
 `make check` completed successfully:
 
 - Native application compilation: PASS, no compiler warnings.
-- Deterministic automated core suite: **107 core + 15 app-model + 14 shortcut lifecycle tests passed, 0 failed**.
+- Deterministic automated core suite: **113 core + 19 app-model + 14 shortcut lifecycle tests passed, 0 failed (146 total)**.
 - `--smoke-test`: PASS (default schema validation and AppKit-linked executable startup).
 - `codesign --verify --strict`: PASS.
 - App `Info.plist` validation: PASS.
@@ -105,3 +105,9 @@ The isolated preview displayed the blue switch while the privacy settings window
 The installer now creates native Finder aliases automatically after app placement, reuses correct aliases on repeat installs, falls back to the desktop if Applications is unavailable, and registers the real app. Uninstall resolves alias arguments and removes only matching shortcuts before deleting the app. A separate Foundation-only helper is included in the package; installing the binary release requires no compiler or Apple Events permission.
 
 Fourteen native filesystem tests pass, including first creation, repeat installs, replacing the app at the same path, conflict/fallback handling, invalid app rejection, direct /Applications installs, symbolic-link cleanup, and the complete create/update/remove shortcut lifecycle. These tests use temporary application fixtures; they do not unregister login items or uninstall the user’s real app. The app source, bundle version, and signing identity are unchanged by this installer-only revision.
+
+## Version 2.2.0 checks
+
+The isolated settings preview showed the native EvenBetterTouchTool/Edit/Settings menus. Settings menu navigation opened Trackpad Calibration. The main calibration page showed “Ready to use without calibration,” live contacts, and a collapsed optional Precision calibration section; Adjust Sensitivity opened controls labeled in percentages. Preview uses no driver, so these checks do not establish sensor accuracy or physical action delivery. Automated regression cases verify relative versus measured units, unconfirmed dimensions, no calibration blocker, relative volume/stationary/reversal behavior, tap/swipe separation, measurement-start clicks waiting for lift, Save-only measurement/unit changes, and settings visibility surviving foreground changes. Native OS permission and gesture conflict gates remain active.
+
+The 2.2.0 tested executable was installed with the local installer, and its bytes match the build. The existing JSON configuration remained byte-for-byte unchanged. The installed app’s main menu contains EvenBetterTouchTool, Edit, and Settings; its real-device calibration page shows relative mode with precision calibration collapsed. Both OS permissions currently need approval for this changed ad-hoc build; no grant or custom action was performed during verification.
