@@ -1,0 +1,62 @@
+# API choices and compatibility limits
+
+EvenBetterTouchTool 2.0 targets macOS 14 or later, Apple Silicon. It was compiled on macOS 26.6.2 with Swift 6.3.2, using Swift 5 language mode. Physical trackpad behavior on a 15-inch M4 MacBook Air remains a manual validation task.
+
+## Contacts and physical distance
+
+The original project's `mt.h` ABI and runtime `dlopen`/`dlsym` approach are retained. `MTDeviceCreateList`, contact frame callbacks, start/stop/unregister, and optional device ID and surface dimension symbols come from **private**, undocumented MultitouchSupport. They can change in a future macOS update. Missing mandatory symbols pause the driver rather than crash the app. This is not Mac App Store software.
+
+The contact structure has normalized position, absolute position, size, and density fields. Neither these fields nor `MTDeviceGetSensorSurfaceDimensions` carry a documented physical unit. Sensor surface dimensions are shown as raw values only. No conversion from these values to millimeters is assumed. Users supply measured active-surface width/height or separately calibrate X and Y with ruler-measured travel. The wizard uses one finger and pauses custom actions during calibration. Measure the active area, not the metal surround. Repeat on external trackpads; calibration is keyed to the private device ID. A device without an ID requires fresh calibration after reconnection. Device IDs themselves are private and not guaranteed stable across OS changes.
+
+## Physical clicks versus taps
+
+Physical multi-finger **click remapping is intentionally disabled**, including the requested three-finger middle click. The contact ABI does not expose a validated physical-press bit. Density and contact size cannot safely be interpreted as Force Touch pressure. A Quartz mouse event does not reliably identify the originating trackpad, and the relative timing of mouse and multitouch callbacks is not a documented synchronization contract. Swallowing a left click based only on the current finger count could swallow another mouse's click or leak the original click.
+
+A listen-only Quartz event tap observes mouse button down/up to **cancel taps**, never to suppress or remap the original event. Button-held contact sessions are also cancelled. Taps are delayed 80 ms to permit a late button-down event to cancel them; this is an extra conservative guard, not proof of device identity. Tap actions are unavailable if the observer cannot be created. They also require explicit confirmation that Look Up, Tap to click, and three-finger dragging were disabled. A different mouse click during a trackpad tap conservatively cancels the tap. Inter-device timing still needs hardware testing. If any false tap occurs during a physical press on your setup, disable the tap mappings. Normal physical clicks are always native.
+
+A **middle-click action** is implemented and can be assigned to a calibrated swipe or tap, subject to the same tap setup restrictions. It synthesizes a down/up pair at the pointer; middle dragging is not implemented.
+
+## Native conflicts
+
+The driver observes input. It does **not** prevent Dock/WindowServer or applications from recognizing native gestures. There is no claim of selective native suppression. The setup checkboxes are explicit user declarations, not an automatic probe or preference writer. Changes to macOS native preferences after setup are not detected automatically.
+
+For the intended configuration:
+
+| System Settings location | Required setting |
+| --- | --- |
+| Trackpad → More Gestures → Mission Control | Off |
+| Trackpad → More Gestures → App Exposé | Off |
+| Trackpad → More Gestures → Swipe between full-screen applications | Four fingers |
+| Trackpad → More Gestures → Swipe between pages | Two fingers only, or Off |
+| Trackpad → Point & Click → Look up & data detectors | Off for custom taps |
+| Trackpad → Point & Click → Tap to click | Off for the conservative custom tap setup |
+| Accessibility → Pointer Control → Trackpad Options | Three-finger dragging Off |
+| Keyboard → Keyboard Shortcuts → Mission Control | Enable/verify Mission Control and Application windows |
+
+Four-finger horizontal mappings start as native pass-through: **zero synthetic events**. macOS controls their distance, animation, and availability. Reassigning them requires additionally disabling native “Swipe between full-screen applications” and confirming that change separately. Pass-through on a gesture that has been disabled in System Settings naturally does nothing. Notification Center retains its native two-finger edge gesture; no undocumented opening API is used.
+
+## Actions
+
+- Chrome uses **Command–Option–Left/Right Arrow**, from [Google's official keyboard shortcut documentation](https://support.google.com/chrome/answer/157179?hl=en).
+- Finder uses **Control–Shift–Tab / Control–Tab**, from [Apple's tab documentation](https://support.apple.com/en-sg/guide/mac-help/mchla4695cce/mac). An Accessibility check requires at least two tab controls in a tab group belonging to the focused Finder window. Missing/unrecognized AX structure fails closed. This can also reject a valid Finder window on OS versions with a different hierarchy; inspect with diagnostics. No window-switch shortcut is sent. The desktop and single-tab windows are ineligible.
+- Media commands post `NSEvent.systemDefined`, subtype 8, with the IOKit `NX_KEYTYPE_PLAY/NEXT/PREVIOUS` codes and paired down/up states. This represents the dedicated media keys, not F8/F7/F9 virtual key events. Constants were checked against the installed SDK's `IOKit/hidsystem/ev_keymap.h`. Delivery and which app owns the active media session remain macOS decisions and need real Apple Music/Spotify/browser tests. No app-specific AppleScript is used.
+- Volume uses public Core Audio APIs on the **current default output device**, preferring a writable main volume property and otherwise using supported output channels. Values clamp to 0–1; mute uses the device's mute property. HDMI/USB/aggregate outputs may reject software volume/mute; diagnostics reports that and the app does not fall back to unrelated media-key repeats.
+- Mission Control, App Exposé, Show Desktop, and desktop switching read **explicit enabled symbolic keyboard preference entries**. IDs 32/33/36/79/81 are an undocumented preference schema, read-only and best-effort. Absent/unreadable/disabled entries do not cause assumed shortcuts to fire. General allows a user-verified fallback (for example Control–Left/Right) when the OS entry is unavailable. Ensure your fallback is actually enabled and matches your keyboard settings. No system preference is modified.
+- Lock Screen sends Control–Command–Q. Screenshot sends Shift–Command–5 and opens macOS's screenshot UI. Application switching sends Command–Tab / Command–Shift–Tab (macOS's recent-app order).
+- Open Application launches or activates an installed bundle ID. Activate Application only activates an already running app. An app-specific shortcut only runs while that app has focus. Key codes follow the ANSI virtual keyboard layout; non-US layouts may require choosing different keys.
+- Shortcut sequences run once per contact session, sequentially, and cancel on focus/settings changes. Ordinary shortcut actions can repeat by distance. System overview, desktop, mouse, playback, application, and mute actions are deliberately one-shot to avoid animation overlap or unsafe bursts.
+- Notification Center is marked unavailable; configure a macOS shortcut and assign the Custom Shortcut action instead.
+
+## Distance semantics and performance
+
+Fingers track by identity. A 40 ms landing window permits staggered contact; after that, finger identity/count changes cancel the session until all fingers lift. A short staggered release can finish a tap. Long gaps, duplicate timestamps/IDs, invalid coordinates, large jumps, diagonal movement, physical mouse down, sleep, focus changes, and settings changes cannot produce deferred actions.
+
+Direction locks to one axis. Continuous actions accumulate calibrated signed-axis movement, preserve fractional distance within the direction, and consume all complete intervals in the current frame. Reversal starts distance accumulation at the turning point; sub-interval credit from the previous direction is discarded. Jitter is an anchor deadband, so small increments can add up instead of being lost per frame. Activation movement counts toward the first interval. There is no auto-repeat, inertia, or timer draining action debt.
+
+An exceptional burst above 64 intervals in a frame cancels that contact session. A 120-action/second executor cap, optional cooldowns, and a stale-delivery check discard excess work rather than replaying it after fingers stop. Thus the 10 mm → 10 steps rule holds for normal tracking inside these explicit stability limits, not arbitrary input floods. Media actions are one-shot; volume uses distance-based 2-percentage-point changes by default. Reconnection enumeration runs every three seconds, permission/config checks every two seconds. Idle gesture processing does no repeated actions. Idle CPU consumption has not been measured on physical hardware.
+
+## Signing and deployment
+
+The stable bundle ID is `org.evenbettertouchtool.app`. The app is unsandboxed and locally ad-hoc signed by default. An ad-hoc signature is **not notarization** and does not establish a durable signing identity across changed builds. Use a consistent local Apple Development or Developer ID identity (`make SIGN='…'`) to improve grant continuity. Do not enable hardened runtime/library validation blindly: loading a private framework and posting input needs validation on the deployment target. Public distribution requires a developer to sign and notarize their own release. This build does not pretend to be notarized. Grant the actual installed app permissions; the old daemon's grants do not transfer. Re-add stale entries after an unsigned/ad-hoc rebuild if needed.
+
+Sources for contact ABI investigation: [M5MultitouchSupport's original header](https://github.com/mhuusko5/M5MultitouchSupport/blob/master/M5MultitouchSupport/M5MTDefinesInternal.h), [MultitouchSupport function declarations](https://github.com/machinarii/hypervibe/blob/main/MultitouchSupport.h), and the upstream `mt.h` attribution. [Apple's gestures reference](https://support.apple.com/en-us/102482) describes the user-visible native gestures. These sources inform implementation choices; they are not a macOS compatibility guarantee.

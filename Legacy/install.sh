@@ -1,0 +1,69 @@
+#!/bin/bash
+# threefinger installer — latest release binary, no clone, no build.
+# curl -fsSL https://raw.githubusercontent.com/firedev/threefinger/master/install.sh | bash
+set -euo pipefail
+
+REPO=firedev/threefinger
+LABEL=com.firedev.threefinger
+BINDIR="${BINDIR:-$HOME/.local/bin}"
+AGENTS="${AGENTS:-$HOME/Library/LaunchAgents}"
+
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+curl -fsSL "https://github.com/$REPO/releases/latest/download/threefinger-arm64.tar.gz" | tar xz -C "$tmp"
+
+# One daemon only — stop our agent and any Homebrew service copy.
+launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+launchctl bootout "gui/$(id -u)/homebrew.mxcl.threefinger" 2>/dev/null || true
+launchctl bootout "gui/$(id -u)/sh.brew.threefinger" 2>/dev/null || true
+brew services stop threefinger 2>/dev/null || true
+brew list threefinger >/dev/null 2>&1 && brew_copy=1 || brew_copy=0
+mkdir -p "$BINDIR" "$AGENTS"
+if cmp -s "$tmp/threefinger" "$BINDIR/threefinger"; then
+    replaced=0
+else
+    replaced=1
+    install -m 755 "$tmp/threefinger" "$BINDIR/threefinger"
+fi
+sed "s|/usr/local/bin|$BINDIR|" "$tmp/$LABEL.plist" > "$AGENTS/$LABEL.plist"
+launchctl bootstrap "gui/$(id -u)" "$AGENTS/$LABEL.plist"
+
+cat <<EOF
+
+Installed: $BINDIR/threefinger
+
+Permissions:
+EOF
+"$BINDIR/threefinger" --check --open || true
+
+cat <<EOF
+
+Next:
+  1. Allow threefinger in System Settings (Accessibility / Device Control and Data Access + Input Monitoring)
+     — for threefinger itself, not Terminal.
+EOF
+if [ "$replaced" = 1 ]; then
+    cat <<EOF
+     Upgrading from 1.1.x: the old threefinger entry no longer works even if it
+     shows as on (1.2.0+ keeps the grant across upgrades). Select it, click −, then + → $BINDIR/threefinger.
+EOF
+fi
+cat <<'EOF'
+  2. Trackpad → More Gestures
+       Mission Control → Swipe Up with Four Fingers
+       App Exposé → Swipe Down with Four Fingers
+       Swipe between full-screen applications → Swipe Left or Right with Four Fingers
+       Swipe between pages → Off  (optional)
+
+Then three fingers left/right change tabs.
+
+EOF
+
+if [ "$brew_copy" = 1 ]; then
+    cat <<'EOF'
+A Homebrew copy is still installed — `brew upgrade` would start a second daemon
+and swipes would double-fire. Remove it:
+
+  brew uninstall threefinger
+
+EOF
+fi
