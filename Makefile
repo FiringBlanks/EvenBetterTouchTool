@@ -5,7 +5,7 @@ SOURCES = $(wildcard Sources/App/*.swift) $(CORE) main.swift
 SIGN ?= -
 SWIFTFLAGS = -swift-version 5 -O -target arm64-apple-macosx14.0 -module-cache-path build/module-cache
 
-all: $(APP)/Contents/MacOS/EvenBetterTouchTool sign
+all: $(APP)/Contents/MacOS/EvenBetterTouchTool sign build/launcher-tool
 
 $(APP)/Contents/MacOS/EvenBetterTouchTool: $(SOURCES) mt.h Resources/Info.plist Resources/AppIcon.icns LICENSE
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources build/module-cache
@@ -21,6 +21,15 @@ Resources/AppIcon.icns: scripts/create-icon.swift
 	mkdir -p build/AppIcon.iconset
 	xcrun swift -module-cache-path build/module-cache scripts/create-icon.swift build/AppIcon.iconset
 
+build/launcher-tool: Sources/Installer/LauncherManager.swift Sources/Installer/main.swift
+	mkdir -p build/module-cache
+	$(SWIFTC) $(SWIFTFLAGS) Sources/Installer/LauncherManager.swift Sources/Installer/main.swift -o $@
+	codesign --force --sign "$(SIGN)" --identifier org.evenbettertouchtool.installer $@
+
+build/LauncherTests: Sources/Installer/LauncherManager.swift Tests/LauncherTests.swift
+	mkdir -p build/module-cache
+	$(SWIFTC) $(SWIFTFLAGS) Sources/Installer/LauncherManager.swift Tests/LauncherTests.swift -o $@
+
 build/CoreTests: $(CORE) Tests/CoreTests.swift
 	mkdir -p build/module-cache
 	$(SWIFTC) $(SWIFTFLAGS) $(CORE) Tests/CoreTests.swift -o $@
@@ -29,15 +38,16 @@ build/AppModelTests: $(CORE) Sources/App/AppModel.swift Sources/App/ActionExecut
 	mkdir -p build/module-cache
 	$(SWIFTC) $(SWIFTFLAGS) -import-objc-header mt.h $(CORE) Sources/App/AppModel.swift Sources/App/ActionExecutor.swift Sources/App/TrackpadDriver.swift Tests/AppModelTests.swift -o $@
 
-test: build/CoreTests build/AppModelTests
+test: build/CoreTests build/AppModelTests build/LauncherTests
 	./build/CoreTests
 	./build/AppModelTests
+	./build/LauncherTests
 
 check: all test
 	$(APP)/Contents/MacOS/EvenBetterTouchTool --smoke-test
 	codesign --verify --strict $(APP)
 	plutil -lint $(APP)/Contents/Info.plist
-	for script in Install.command install.sh uninstall.sh scripts/migrate-legacy.sh scripts/package.sh; do bash -n "$$script" || exit 1; done
+	for script in Install.command install.sh uninstall.sh scripts/migrate-legacy.sh scripts/package.sh scripts/launcher-support.sh; do bash -n "$$script" || exit 1; done
 
 run: all
 	open $(APP)

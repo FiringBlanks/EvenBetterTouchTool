@@ -19,7 +19,7 @@ Build host: Apple Silicon, macOS 26.6.2, Swift 6.3.2, Command Line Tools. Target
 `make check` completed successfully:
 
 - Native application compilation: PASS, no compiler warnings.
-- Deterministic automated core suite: **107 core tests + 15 app-model tests passed, 0 failed**.
+- Deterministic automated core suite: **107 core + 15 app-model + 14 shortcut lifecycle tests passed, 0 failed**.
 - `--smoke-test`: PASS (default schema validation and AppKit-linked executable startup).
 - `codesign --verify --strict`: PASS.
 - App `Info.plist` validation: PASS.
@@ -57,6 +57,8 @@ New implementation:
 - `Sources/Core/GestureEngine.swift`
 - `Sources/Core/SettingsDraft.swift`
 - `Sources/Core/GestureReadiness.swift`
+- `Sources/Installer/LauncherManager.swift`
+- `Sources/Installer/main.swift`
 - `Sources/App/ActionExecutor.swift`
 - `Sources/App/AppDelegate.swift`
 - `Sources/App/AppModel.swift`
@@ -64,11 +66,13 @@ New implementation:
 - `Sources/App/TrackpadDriver.swift`
 - `Tests/CoreTests.swift`
 - `Tests/AppModelTests.swift`
+- `Tests/LauncherTests.swift`
 - `Resources/Info.plist`
 - `Resources/AppIcon.icns`
 - `scripts/create-icon.swift`
 - `scripts/migrate-legacy.sh`
 - `scripts/package.sh`
+- `scripts/launcher-support.sh`
 - `Install.command`
 - `docs/RELEASE-NOTES.md`
 - `docs/PERMISSIONS.md`
@@ -95,3 +99,9 @@ The app-model tests instantiate the actual model with temporary configuration fi
 The new readiness tests cover missing Accessibility/Input Monitoring, unsaved setup confirmations, calibration, device selection, row switches, disabled master, emergency pause, legacy daemons, and configuration errors. App-model tests verify ready mappings remain zero until actual permission flags and saved setup/calibration are satisfied. The relaunch guard does not save pending edits.
 
 The isolated preview displayed the blue switch while the privacy settings window was being used, exposed its state as a normal accessibility switch, showed the exact app-path instructions, and successfully relaunched into the same isolated preview mode. macOS Accessibility was inspected read-only and an enabled app entry was present; Input Monitoring showed No Items. No privacy grants were changed, no native settings were changed, and no setup/calibration values were invented. Real gesture execution remains a user acceptance step after those blockers are resolved.
+
+## Installer revision 1 for app 2.1.1
+
+The installer now creates native Finder aliases automatically after app placement, reuses correct aliases on repeat installs, falls back to the desktop if Applications is unavailable, and registers the real app. Uninstall resolves alias arguments and removes only matching shortcuts before deleting the app. A separate Foundation-only helper is included in the package; installing the binary release requires no compiler or Apple Events permission.
+
+Fourteen native filesystem tests pass, including first creation, repeat installs, replacing the app at the same path, conflict/fallback handling, invalid app rejection, direct /Applications installs, symbolic-link cleanup, and the complete create/update/remove shortcut lifecycle. These tests use temporary application fixtures; they do not unregister login items or uninstall the user’s real app. The app source, bundle version, and signing identity are unchanged by this installer-only revision.

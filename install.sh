@@ -2,6 +2,7 @@
 # Install the locally built app. No upstream --reinstall, curl, or downloads.
 set -euo pipefail
 root="$(cd "$(dirname "$0")" && pwd)"
+source "$root/scripts/launcher-support.sh"
 destination="$HOME/Applications"
 dry_run=0
 while [[ $# -gt 0 ]]; do
@@ -32,8 +33,10 @@ fi
 if [[ "$dry_run" == 1 ]]; then
     "$root/scripts/migrate-legacy.sh" --dry-run
     printf 'Would install %s at %s; replace an existing app only after saving a backup.\n' "$app" "$target"
+    echo "Would add an Applications shortcut, or a desktop shortcut if the main Applications folder is unavailable."
     exit 0
 fi
+helper=$(find_launcher_tool "$root")
 mkdir -p "$destination"
 staging=$(mktemp -d "$destination/.evenbettertouchtool-install.XXXXXX")
 trap 'rm -rf "$staging"' EXIT
@@ -41,7 +44,7 @@ trap 'rm -rf "$staging"' EXIT
 codesign --verify --strict "$staging/EvenBetterTouchTool.app"
 # Stage and validate the entire replacement before stopping any existing daemon.
 "$root/scripts/migrate-legacy.sh" --apply
-# Request a graceful quit so pending configuration edits are flushed.
+# Quit the old process; pending edits are never saved implicitly.
 "$app/Contents/MacOS/EvenBetterTouchTool" --quit-running
 for attempt in {1..20}; do
     remaining=$(/bin/ps -U "$(id -u)" -o pid=,comm= | /usr/bin/awk '$NF ~ /\/EvenBetterTouchTool.app\/Contents\/MacOS\/EvenBetterTouchTool$/ {print $1}')
@@ -54,6 +57,7 @@ if [[ -e "$target" ]]; then
     mkdir -p "$backup"; /usr/bin/ditto "$target" "$backup/EvenBetterTouchTool.app"; rm -rf "$target"
 fi
 mv "$staging/EvenBetterTouchTool.app" "$target"
+create_launch_shortcut "$helper" "$target"
 open "$target"
 printf '\nInstalled: %s\n' "$target"
 cat <<'MESSAGE'
