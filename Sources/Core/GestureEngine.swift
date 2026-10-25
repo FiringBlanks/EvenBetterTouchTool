@@ -126,7 +126,7 @@ final class GestureEngine {
         if let reason = config.blockedReason(g, mapping: m, device: device) { snapshot.reason = reason; remainder = 0; return [] }
         let distance = m.distanceMM ?? (horizontal ? sensitivity.horizontalMM : sensitivity.verticalMM)
         guard remainder + 1e-7 >= distance else { return [] }
-        let continuous = m.continuous && m.action.kind.repeatable
+        let continuous = m.continuous && m.action.supportsContinuous
         if !continuous && singleFired { remainder = 0; return [] }
         let count = continuous ? Int(floor((remainder + 1e-7)/distance)) : 1
         remainder = continuous ? max(0, remainder-Double(count)*distance) : 0

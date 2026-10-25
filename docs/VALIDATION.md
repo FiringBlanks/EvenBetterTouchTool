@@ -3,9 +3,9 @@
 ## Artifacts
 
 - Standalone Apple Silicon application: `build/EvenBetterTouchTool.app`
-- Installable archive: `build/EvenBetterTouchTool-2.2.0-arm64.zip`
-- Archive checksum: `build/EvenBetterTouchTool-2.2.0-arm64.zip.sha256`
-- Raw local build/test log: `build/settings-calibration-check.log`
+- Installable archive: `build/EvenBetterTouchTool-2.2.1-arm64.zip`
+- Archive checksum: `build/EvenBetterTouchTool-2.2.1-arm64.zip.sha256`
+- Raw local build/test log: `build/continuous-check.log`
 - Double-click installer: `Install.command`
 - Local installer: `install.sh` (inspect using `./install.sh --dry-run` first)
 - Uninstaller: `uninstall.sh`
@@ -19,7 +19,7 @@ Build host: Apple Silicon, macOS 26.6.2, Swift 6.3.2, Command Line Tools. Target
 `make check` completed successfully:
 
 - Native application compilation: PASS, no compiler warnings.
-- Deterministic automated core suite: **113 core + 19 app-model + 14 shortcut lifecycle tests passed, 0 failed (146 total)**.
+- Deterministic automated core suite: **119 core + 20 app-model + 14 shortcut lifecycle tests passed, 0 failed (153 total)**.
 - `--smoke-test`: PASS (default schema validation and AppKit-linked executable startup).
 - `codesign --verify --strict`: PASS.
 - App `Info.plist` validation: PASS.
@@ -111,3 +111,7 @@ Fourteen native filesystem tests pass, including first creation, repeat installs
 The isolated settings preview showed the native EvenBetterTouchTool/Edit/Settings menus. Settings menu navigation opened Trackpad Calibration. The main calibration page showed “Ready to use without calibration,” live contacts, and a collapsed optional Precision calibration section; Adjust Sensitivity opened controls labeled in percentages. Preview uses no driver, so these checks do not establish sensor accuracy or physical action delivery. Automated regression cases verify relative versus measured units, unconfirmed dimensions, no calibration blocker, relative volume/stationary/reversal behavior, tap/swipe separation, measurement-start clicks waiting for lift, Save-only measurement/unit changes, and settings visibility surviving foreground changes. Native OS permission and gesture conflict gates remain active.
 
 The 2.2.0 tested executable was installed with the local installer, and its bytes match the build. The existing JSON configuration remained byte-for-byte unchanged. The installed app’s main menu contains EvenBetterTouchTool, Edit, and Settings; its real-device calibration page shows relative mode with precision calibration collapsed. Both OS permissions currently need approval for this changed ad-hoc build; no grant or custom action was performed during verification.
+
+## Version 2.2.1 checks
+
+The preview’s Global three-finger right editor was changed to Sequence with one shortcut: Continuous was enabled and switched on successfully. Adding a second shortcut disabled it with a visible explanation; removing that shortcut re-enabled it. Clicking Save persisted the single-shortcut Sequence with continuous=true in the isolated preview configuration. The preview starts no gesture driver and sends no keyboard actions. Core tests verify count-based repeats, fractions, reversal, stationary contacts, application targeting, and multi-step single-trigger behavior. An app-model test verifies explicit gesture Save persistence. Actual shortcut delivery and timing remain hardware tests.

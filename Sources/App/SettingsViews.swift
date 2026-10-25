@@ -193,7 +193,7 @@ struct GestureGrid: View {
             VStack(spacing: 8) {
                 Image(systemName: symbol(g.direction)).font(.title3)
                 Text(m.action.kind.title).font(.caption.weight(.medium)).multilineTextAlignment(.center).frame(maxWidth: .infinity, minHeight: 32)
-                Text(g.direction == .click ? "Unsupported" : !rowEnabled ? "Row disabled" : !m.enabled ? "Disabled" : m.continuous && m.action.kind.repeatable ? "Continuous" : "Single").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text(g.direction == .click ? "Unsupported" : !rowEnabled ? "Row disabled" : !m.enabled ? "Disabled" : m.continuous && m.action.supportsContinuous ? "Continuous" : "Single").font(.system(size: 10)).foregroundStyle(.secondary)
             }.padding(10).frame(maxWidth: .infinity, minHeight: 120)
                 .background(rowEnabled && m.enabled && g.direction != .click ? Color.accentColor.opacity(0.09) : Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.secondary.opacity(0.15)))
@@ -236,7 +236,12 @@ struct MappingEditor: View {
             Divider()
             Form {
                 if gesture.direction == .click { Section { Text("Physical click remapping is unavailable. Normal physical clicks remain native and cancel custom taps.") } }
-                if !profileID.isEmpty { Section { Toggle("Use global mapping", isOn: $inherited) } }
+                if !profileID.isEmpty {
+                    Section {
+                        Toggle("Use global mapping", isOn: $inherited)
+                        if inherited { Button("Customize for This App") { inherited = false } }
+                    }
+                }
                 Section("Action") {
                     Toggle("Enable this gesture", isOn: $draft.enabled)
                     Picker("Assigned action", selection: $draft.action.kind) {
@@ -249,7 +254,11 @@ struct MappingEditor: View {
                 }.disabled(gesture.direction == .click || inherited)
                 if gesture.direction.isSwipe {
                     Section("Movement") {
-                        Toggle("Continuous", isOn: $draft.continuous).disabled(!draft.action.kind.repeatable)
+                        Toggle("Continuous", isOn: Binding(get: { draft.continuous && draft.action.supportsContinuous }, set: { draft.continuous = $0 }))
+                            .disabled(!draft.action.supportsContinuous)
+                        if let reason = draft.action.continuousUnavailableReason {
+                            Text(reason).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
                         Toggle("Override distance", isOn: Binding(get: { draft.distanceMM != nil }, set: { draft.distanceMM = $0 ? 1 : nil }))
                         if draft.distanceMM != nil { NumericSlider(title: "Distance per action", value: Binding(get: { draft.distanceMM ?? 1 }, set: { draft.distanceMM = $0 }), range: 0.5...20, unit: model.distanceUnit) }
                         Toggle("Reverse direction", isOn: $draft.reverse)

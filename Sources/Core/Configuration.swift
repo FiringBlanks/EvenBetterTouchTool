@@ -49,6 +49,21 @@ struct Action: Codable, Equatable {
     var shortcuts: [Shortcut] = [Shortcut()]
     var bundleID: String = ""
     var volumePercent: Double? = nil
+    /// Legacy imports represent even one keystroke as a sequence. A single
+    /// command can repeat synchronously; timed multi-command sequences cannot.
+    var supportsContinuous: Bool {
+        if [.sequence, .applicationShortcut].contains(kind) { return shortcuts.count == 1 }
+        return kind.repeatable && (kind != .shortcut || !shortcuts.isEmpty)
+    }
+    var continuousUnavailableReason: String? {
+        guard !supportsContinuous else { return nil }
+        if [.sequence, .applicationShortcut].contains(kind) {
+            return "Continuous needs one shortcut. Multi-step sequences run once per swipe."
+        }
+        if kind == .none || kind == .native { return "Choose a custom action that can repeat to use Continuous." }
+        if kind == .shortcut { return "Add a shortcut to use Continuous." }
+        return "\(kind.title) runs once per swipe. Choose a shortcut, tab, browser, or volume action for Continuous."
+    }
 }
 struct Mapping: Codable, Equatable {
     var enabled = true

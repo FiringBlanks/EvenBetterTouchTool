@@ -150,6 +150,17 @@ import Foundation
             model.config.menuBarOnly=false; try expect(model.save() && model.wantsDockAndMenu)
             try expect(before != Data(contentsOf:url))
         }
+        test("Continuous sequence edits require explicit gesture Save") { model, url in
+            let g=Gesture(fingers:3,direction:.right)
+            var mapping=Mapping(action:Action(kind:.sequence,shortcuts:[Shortcut(keyCode:48)]))
+            model.config.mappings[g.id]=mapping; try expect(model.save())
+            let before=try Data(contentsOf:url)
+            mapping.continuous=true
+            try expect(mapping.action.supportsContinuous && !model.savedConfig.mappings[g.id]!.continuous)
+            try expect(try Data(contentsOf:url)==before)
+            try expect(model.saveMapping(mapping,gesture:g,profileID:""))
+            try expect(try ConfigurationStore(url:url).load().mappings[g.id]!.continuous)
+        }
         print("\n\(passed) model tests passed; \(failed) failed")
         if failed > 0 { exit(1) }
     }
