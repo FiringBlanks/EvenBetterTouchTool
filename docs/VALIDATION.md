@@ -3,9 +3,9 @@
 ## Artifacts
 
 - Standalone Apple Silicon application: `build/EvenBetterTouchTool.app`
-- Installable archive: `build/EvenBetterTouchTool-2.1.0-arm64.zip`
-- Archive checksum: `build/EvenBetterTouchTool-2.1.0-arm64.zip.sha256`
-- Raw local build/test log: `build/qol-check.log`
+- Installable archive: `build/EvenBetterTouchTool-2.1.1-arm64.zip`
+- Archive checksum: `build/EvenBetterTouchTool-2.1.1-arm64.zip.sha256`
+- Raw local build/test log: `build/permissions-check.log`
 - Double-click installer: `Install.command`
 - Local installer: `install.sh` (inspect using `./install.sh --dry-run` first)
 - Uninstaller: `uninstall.sh`
@@ -19,7 +19,7 @@ Build host: Apple Silicon, macOS 26.6.2, Swift 6.3.2, Command Line Tools. Target
 `make check` completed successfully:
 
 - Native application compilation: PASS, no compiler warnings.
-- Deterministic automated core suite: **97 core tests + 12 app-model tests passed, 0 failed**.
+- Deterministic automated core suite: **107 core tests + 15 app-model tests passed, 0 failed**.
 - `--smoke-test`: PASS (default schema validation and AppKit-linked executable startup).
 - `codesign --verify --strict`: PASS.
 - App `Info.plist` validation: PASS.
@@ -56,6 +56,7 @@ New implementation:
 - `Sources/Core/ConfigurationStore.swift`
 - `Sources/Core/GestureEngine.swift`
 - `Sources/Core/SettingsDraft.swift`
+- `Sources/Core/GestureReadiness.swift`
 - `Sources/App/ActionExecutor.swift`
 - `Sources/App/AppDelegate.swift`
 - `Sources/App/AppModel.swift`
@@ -70,6 +71,7 @@ New implementation:
 - `scripts/package.sh`
 - `Install.command`
 - `docs/RELEASE-NOTES.md`
+- `docs/PERMISSIONS.md`
 - `docs/COMPATIBILITY.md`
 - `docs/MANUAL-TESTS.md`
 - `docs/VALIDATION.md`
@@ -87,3 +89,9 @@ Upstream references preserved, never built or invoked:
 ## 2.1 save-only regression coverage
 
 The app-model tests instantiate the actual model with temporary configuration files, without starting hardware callbacks. They verify that editing and waiting, Quit, Reset, staged imports, restored defaults, row switches, login startup selection, emergency pause, invalid saves, and device discovery never implicitly overwrite saved settings. Explicit Save and scoped gesture Save are tested against real atomic JSON writes. Core tests additionally cover per-app row priority, preservation of individually disabled/unsupported mappings, pending edit conflicts, and new-profile gesture saves.
+
+## 2.1.1 permission/readiness checks
+
+The new readiness tests cover missing Accessibility/Input Monitoring, unsaved setup confirmations, calibration, device selection, row switches, disabled master, emergency pause, legacy daemons, and configuration errors. App-model tests verify ready mappings remain zero until actual permission flags and saved setup/calibration are satisfied. The relaunch guard does not save pending edits.
+
+The isolated preview displayed the blue switch while the privacy settings window was being used, exposed its state as a normal accessibility switch, showed the exact app-path instructions, and successfully relaunched into the same isolated preview mode. macOS Accessibility was inspected read-only and an enabled app entry was present; Input Monitoring showed No Items. No privacy grants were changed, no native settings were changed, and no setup/calibration values were invented. Real gesture execution remains a user acceptance step after those blockers are resolved.

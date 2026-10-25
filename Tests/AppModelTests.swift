@@ -94,6 +94,29 @@ import Foundation
             try expect(model.activeDevice == "discovered" && model.config.selectedDevice.isEmpty)
             try expect(try Data(contentsOf: url) == before)
         }
+        test("Relaunch refuses unsaved edits without implicitly saving") { model, url in
+            let before=try Data(contentsOf:url)
+            model.config.sensitivity.horizontalMM=9; model.relaunch()
+            try expect(model.hasPendingChanges && model.message.contains("Save or Reset"))
+            try expect(try Data(contentsOf:url)==before)
+        }
+        test("Ready mapping count is zero while either permission is unverified") { model, _ in
+            model.config.safety.nativeConflictsResolved=true; model.config.safety.tapConflictsResolved=true
+            model.config.calibrations["test"]=Calibration(widthMM:100,heightMM:100,confirmed:true)
+            try expect(model.save()); model.activeDevice="test"
+            model.accessibility=false; model.inputMonitoring=true
+            try expect(model.readyMappingCount==0 && model.gestureBlockers.contains(.accessibility))
+            model.accessibility=true; model.inputMonitoring=false
+            try expect(model.readyMappingCount==0 && model.gestureBlockers.contains(.inputMonitoring))
+            model.inputMonitoring=true
+            try expect(model.readyMappingCount>0)
+        }
+        test("Pending setup confirmations do not falsely mark gestures ready") { model, _ in
+            model.activeDevice="test"; model.accessibility=true; model.inputMonitoring=true
+            model.config.safety.nativeConflictsResolved=true
+            model.config.calibrations["test"]=Calibration(widthMM:100,heightMM:100,confirmed:true)
+            try expect(model.readyMappingCount==0 && model.gestureBlockers.contains(.nativeSetup) && model.gestureBlockers.contains(.calibration))
+        }
         print("\n\(passed) model tests passed; \(failed) failed")
         if failed > 0 { exit(1) }
     }

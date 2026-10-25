@@ -6,7 +6,7 @@ A free, MIT-licensed native SwiftUI menu bar app built from [firedev/threefinger
 
 ## Download and change settings
 
-Download the [Apple Silicon release ZIP](https://github.com/FiringBlanks/EvenBetterTouchTool/releases/download/v2.1.0/EvenBetterTouchTool-2.1.0-arm64.zip) from [GitHub Releases](https://github.com/FiringBlanks/EvenBetterTouchTool/releases). Extract it and run `Install.command` (or `./install.sh` in Terminal). The installer places the app in your Applications folder and safely stops the original threefinger service if present. The app is also included directly in the ZIP.
+Download the [Apple Silicon release ZIP](https://github.com/FiringBlanks/EvenBetterTouchTool/releases/download/v2.1.1/EvenBetterTouchTool-2.1.1-arm64.zip) from [GitHub Releases](https://github.com/FiringBlanks/EvenBetterTouchTool/releases). Extract it and run `Install.command` (or `./install.sh` in Terminal). The installer places the app in your Applications folder and safely stops the original threefinger service if present. The app is also included directly in the ZIP.
 
 Open **EvenBetterTouchTool** from Applications. Click its **hand icon in the menu bar → Open Settings**. In **Gestures**, choose Global or an app profile, then click a gesture cell to change its action. Use **Applications** for per-app overrides and **Sensitivity** for distance/tap settings. Edits stay pending until you click **Save**. **Reset** discards pending edits. Complete Setup Assistant, permissions, and calibration before using custom input.
 
@@ -22,13 +22,15 @@ make package     # installable ZIP plus SHA-256 checksum
 ./install.sh
 ```
 
-The compiled app is `build/EvenBetterTouchTool.app`. Installation defaults to `~/Applications/EvenBetterTouchTool.app`. Use `./install.sh --destination /Applications` if you prefer the system Applications folder and have write access. The package is `build/EvenBetterTouchTool-2.1.0-arm64.zip`; unzip and run the included `Install.command` or `install.sh`. It contains the built app and does not need to download or recompile anything. A `.dmg` is unnecessary: the ZIP includes a complete signed `.app`, installer, uninstaller, and documentation.
+The compiled app is `build/EvenBetterTouchTool.app`. Installation defaults to `~/Applications/EvenBetterTouchTool.app`. Use `./install.sh --destination /Applications` if you prefer the system Applications folder and have write access. The package is `build/EvenBetterTouchTool-2.1.1-arm64.zip`; unzip and run the included `Install.command` or `install.sh`. It contains the built app and does not need to download or recompile anything. A `.dmg` is unnecessary: the ZIP includes a complete signed `.app`, installer, uninstaller, and documentation.
 
 The installer stages and verifies the replacement **before** stopping the old utility. It unloads the known original/Homebrew user LaunchAgents, archives their plists and existing config under `~/.config/threefinger-migration/`, then stops only exact-name same-user legacy processes. It preserves old CLI binaries, the Homebrew formula, configuration, and previous app backups. It refuses an unrelated app at the destination or a duplicate copy in the standard Applications locations. It never runs upstream `threefinger --reinstall` or downloads the original release. Root-owned/custom-labeled daemons must be stopped separately if you installed one yourself.
 
 Do not run `brew services start/upgrade threefinger` alongside this app. If you no longer need the original Homebrew formula, uninstall it yourself after migration. The app detects a running original same-user daemon at startup and pauses custom actions; Diagnostics can recheck after migration. It also uses a per-user lock to prevent duplicate app engines.
 
 ### First launch
+
+If no gestures work or a permission list says “No Items”, follow the [step-by-step permission and readiness guide](docs/PERMISSIONS.md). The file picker opened by + is normal; use Copy App Path and Command–Shift–G to select the running installed app.
 
 1. Grant **EvenBetterTouchTool.app** Accessibility and Input Monitoring in System Settings → Privacy & Security. Use Dashboard or Setup Assistant to open/request these permissions. Quit/reopen after an Input Monitoring change. The old CLI daemon's grants do not transfer.
 2. Complete **Setup Assistant**: turn native Mission Control/App Exposé trackpad swipes OFF, retain four-finger horizontal full-screen switching, restrict page swipes to two fingers or Off, and turn three-finger dragging OFF. Custom taps additionally require Look Up and Tap to click OFF. The full table and reasoning are in [COMPATIBILITY.md](docs/COMPATIBILITY.md). The app does not alter system preferences or suppress native gestures automatically.
@@ -97,6 +99,7 @@ The upstream MIT license and `mt.h` attribution are retained. Original daemon so
 - `Sources/Core/CalibrationTrial.swift`: validated single-stroke, separate-axis calibration.
 - `Sources/Core/Configuration.swift`: schema, defaults, profiles, validation, safety gates.
 - `Sources/Core/ConfigurationStore.swift`: atomic persistence, import, backed-up legacy migration.
+- `Sources/Core/GestureReadiness.swift`: explicit permission/setup blockers and privacy pane routes.
 - `Sources/Core/SettingsDraft.swift`: pending edits, scoped gesture saves, external-edit conflicts, and row switches.
 - `Sources/Core/GestureEngine.swift`: pure recognition and reusable command planning.
 - `Sources/App/TrackpadDriver.swift`: runtime contact bridge, device selection, serial processing, button observation, lifecycle.

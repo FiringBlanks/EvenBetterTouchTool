@@ -1,6 +1,14 @@
 import AppKit
 import ServiceManagement
 
+if let option = CommandLine.arguments.firstIndex(of: "--wait-for-exit") {
+    guard CommandLine.arguments.indices.contains(option+1), let oldPID = Int32(CommandLine.arguments[option+1]), oldPID > 1, oldPID != getpid() else { exit(2) }
+    for _ in 0..<100 {
+        if kill(oldPID, 0) != 0 { break }
+        Thread.sleep(forTimeInterval: 0.05)
+    }
+    guard kill(oldPID, 0) != 0 else { fputs("The previous app did not quit. Please quit it and reopen manually.\n", stderr); exit(1) }
+}
 if CommandLine.arguments.contains("--quit-running") {
     var failed = false
     for app in NSRunningApplication.runningApplications(withBundleIdentifier: "org.evenbettertouchtool.app") where app.processIdentifier != getpid() {

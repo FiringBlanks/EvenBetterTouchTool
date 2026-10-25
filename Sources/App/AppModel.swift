@@ -7,13 +7,26 @@ struct InstalledApplication: Identifiable {
     var id: String; var name: String; var url: URL
 }
 final class AppModel: ObservableObject {
-    static let version = "2.1.0"
+    static let version = "2.1.1"
     @Published var editing: SettingsDraft
     var config: Configuration { get { editing.config } set { editing.config = newValue } }
     var savedConfig: Configuration { editing.saved }
     var loginEnabled: Bool { get { editing.loginEnabled } set { editing.loginEnabled = newValue } }
     var hasPendingChanges: Bool { editing.hasChanges }
     var canSave: Bool { !editing.externalConflict && (hasPendingChanges || runtimePaused || !FileManager.default.fileExists(atPath: store.url.path) || !configurationIssue.isEmpty) }
+    var gestureBlockers: [GestureBlocker] {
+        GestureReadiness.blockers(config: savedConfig, app: foreground, device: activeDevice,
+            accessibility: accessibility, inputMonitoring: inputMonitoring, runtimePaused: runtimePaused,
+            legacyDaemon: !legacyPIDs.isEmpty, configurationError: !configurationIssue.isEmpty, calibrating: calibrationAxis != nil)
+    }
+    var readyMappingCount: Int {
+        guard gestureBlockers.isEmpty else { return 0 }
+        return Gesture.all.filter { g in
+            guard g.direction != .tap || (buttonObserver && savedConfig.safety.tapConflictsResolved) else { return false }
+            return savedConfig.blockedReason(g, mapping: savedConfig.mapping(g, app: foreground), device: activeDevice) == nil
+        }.count
+    }
+    var applicationURL: URL { Bundle.main.bundleURL }
     @Published var runtimePaused = false
     @Published var section = "Dashboard"
     @Published var selectedProfile = ""
@@ -145,9 +158,25 @@ final class AppModel: ObservableObject {
         if accessibility != ax || inputMonitoring != input { accessibility = ax; inputMonitoring = input; driver.cancel(); executor.cancel() }
         editing.observeLogin(SMAppService.mainApp.status == .enabled || SMAppService.mainApp.status == .requiresApproval)
     }
-    func requestPermissions() {
-        _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue():true] as CFDictionary)
-        _ = CGRequestListenEventAccess(); checkPermissions()
+    func requestPermission(_ permission: PrivacyPermission) {
+        if permission == .accessibility {
+            _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
+        } else { _ = CGRequestListenEventAccess() }
+        checkPermissions(); openSettings(permission.settingsURL)
+    }
+    func requestPermissions() { requestPermission(!accessibility ? .accessibility : .inputMonitoring) }
+    func copyApplicationPath() {
+        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(applicationURL.path, forType: .string)
+    }
+    func revealApplication() { NSWorkspace.shared.activateFileViewerSelecting([applicationURL]) }
+    func relaunch() {
+        guard !hasPendingChanges else { message = "Save or Reset pending edits before relaunching."; return }
+        guard let executable = Bundle.main.executableURL, applicationURL.pathExtension == "app" else { message = "Relaunch is available from the installed app."; return }
+        let task = Process(); task.executableURL = executable
+        task.arguments = ["--wait-for-exit", String(getpid()), "--open-settings"]
+        if CommandLine.arguments.contains("--ui-preview") { task.arguments?.append("--ui-preview") }
+        do { try task.run(); NSApp?.terminate(nil) }
+        catch { message = "Could not relaunch: \(error.localizedDescription)" }
     }
     func openSettings(_ pane: String) { if let url = URL(string: pane) { NSWorkspace.shared.open(url) } }
     func openLoginItems() { SMAppService.openSystemSettingsLoginItems() }
@@ -227,6 +256,8 @@ final class AppModel: ObservableObject {
     var diagnostics: String {
         """
         EvenBetterTouchTool \(Self.version) • \(ProcessInfo.processInfo.operatingSystemVersionString)
+        App path: \(applicationURL.path)
+        Blockers: \(gestureBlockers.map(\.title).joined(separator: "; "))
         Configuration issue: \(configurationIssue)
         Engine: \(engineStatus) • Enabled: \(savedConfig.enabled && !runtimePaused)
         Device: \(activeDevice) • Devices: \(devices.count)

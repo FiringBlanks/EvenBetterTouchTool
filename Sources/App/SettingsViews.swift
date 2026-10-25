@@ -7,6 +7,51 @@ private let inputPane = "x-apple.systempreferences:com.apple.settings.PrivacySec
 private let pointerPane = "x-apple.systempreferences:com.apple.Accessibility-Settings.extension"
 private let keyboardPane = "x-apple.systempreferences:com.apple.Keyboard-Settings.extension"
 
+/// A fixed blue track conveys the selected value even when macOS deactivates the window.
+struct PersistentBlueSwitchStyle: ToggleStyle {
+    func makeBody(configuration: ToggleStyleConfiguration) -> some View {
+        HStack(spacing: 8) {
+            configuration.label
+            Button { configuration.isOn.toggle() } label: {
+                ZStack(alignment: configuration.isOn ? .trailing : .leading) {
+                    Capsule().fill(configuration.isOn ? Color(red: 0, green: 0.48, blue: 1) : Color.secondary.opacity(0.28))
+                    Circle().fill(.white).padding(2).shadow(color: .black.opacity(0.12), radius: 1, y: 1)
+                }.frame(width: 38, height: 22)
+            }.buttonStyle(.plain)
+        }.accessibilityRepresentation {
+            Toggle(isOn: configuration.$isOn) { configuration.label }.toggleStyle(.switch)
+        }
+    }
+}
+struct PermissionControls: View {
+    @ObservedObject var model: AppModel
+    var body: some View {
+        ForEach(PrivacyPermission.allCases) { permission in
+            let granted = permission == .accessibility ? model.accessibility : model.inputMonitoring
+            HStack(spacing: 12) {
+                Label(permission.title, systemImage: granted ? "checkmark.circle.fill" : "exclamationmark.circle").foregroundStyle(granted ? .green : .orange)
+                Spacer()
+                Text(granted ? "Verified" : "Not verified").font(.caption).foregroundStyle(.secondary)
+                Button(granted ? "Open Settings" : "Set Up…") {
+                    if granted { model.openSettings(permission.settingsURL) } else { model.requestPermission(permission) }
+                }
+            }
+        }
+        if !model.accessibility || !model.inputMonitoring {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("In the permission list, click +. In the file picker press ⌘⇧G, paste this app path, press Return, then click Open and enable its switch.").font(.callout)
+                Text(model.applicationURL.path).font(.system(.caption, design: .monospaced)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                HStack { Button("Copy App Path") { model.copyApplicationPath() }; Button("Show App in Finder") { model.revealApplication() } }
+                Text("If Accessibility already looks enabled, relaunch the app. If it still says Not verified, remove that entry with − and add this installed copy again. Local app updates can invalidate an older grant.").font(.caption).foregroundStyle(.secondary)
+            }.frame(maxWidth: 560, alignment: .leading).padding(.vertical, 4)
+        }
+        HStack {
+            Button("Recheck Permissions") { model.checkPermissions() }
+            Button("Relaunch App") { model.relaunch() }.disabled(model.hasPendingChanges)
+                .help("Save or Reset pending edits first. Relaunch never autosaves settings.")
+        }
+    }
+}
 struct SettingsRoot: View {
     @ObservedObject var model: AppModel
     private let sections: [(String,String)] = [("Dashboard","square.grid.2x2"),("Gestures","hand.draw"),("Applications","app.badge"),("Sensitivity","slider.horizontal.3"),("Trackpad Calibration","ruler"),("Setup Assistant","checklist"),("General","gearshape"),("Diagnostics","waveform.path.ecg")]
@@ -19,7 +64,7 @@ struct SettingsRoot: View {
                     ForEach(sections, id: \.0) { item in Label(item.0, systemImage: item.1).tag(item.0).padding(.vertical,5) }
                 }.listStyle(.sidebar)
                 VStack(alignment: .leading, spacing: 5) {
-                    Label(model.savedConfig.enabled && !model.runtimePaused ? "Gestures enabled" : "Gestures paused", systemImage: model.savedConfig.enabled && !model.runtimePaused ? "circle.fill" : "pause.circle.fill").foregroundStyle(model.savedConfig.enabled && !model.runtimePaused ? .green : .orange)
+                    Label(model.readyMappingCount > 0 ? "Custom gestures ready" : "Custom gestures paused", systemImage: model.readyMappingCount > 0 ? "circle.fill" : "pause.circle.fill").foregroundStyle(model.readyMappingCount > 0 ? .green : .orange)
                     Text("⌃⌥⌘ Esc • Emergency disable").font(.caption2).foregroundStyle(.secondary)
                 }.font(.caption).padding(16)
             }.navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 250)
@@ -31,7 +76,7 @@ struct SettingsRoot: View {
                         Text(subtitle).font(.callout).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Toggle(model.config.enabled ? "Enabled" : "Disabled", isOn: $model.config.enabled).toggleStyle(.switch).accessibilityLabel("Enable gesture engine")
+                    Toggle(model.config.enabled ? "Enabled" : "Disabled", isOn: $model.config.enabled).toggleStyle(PersistentBlueSwitchStyle()).accessibilityLabel("Enable gesture engine")
                 }.padding(24)
                 Divider()
                 if !model.message.isEmpty {
@@ -77,25 +122,23 @@ struct DashboardView: View {
     @ObservedObject var model: AppModel
     var body: some View {
         Form {
+            Section("Gesture readiness") {
+                Label(model.readyMappingCount > 0 ? "Custom gestures are ready" : "Custom gestures are paused", systemImage: model.readyMappingCount > 0 ? "checkmark.circle.fill" : "pause.circle.fill")
+                    .font(.headline).foregroundStyle(model.readyMappingCount > 0 ? .green : .orange)
+                ForEach(model.gestureBlockers) { blocker in Label(blocker.title, systemImage: "circle").font(.callout) }
+                HStack { Button("Open Setup Assistant") { model.section = "Setup Assistant" }; Button("Calibrate Trackpad") { model.section = "Trackpad Calibration" } }
+                if model.hasPendingChanges { Text("Pending setup or calibration changes also need Save.").font(.caption).foregroundStyle(.secondary) }
+            }
+            Section("Permissions") { PermissionControls(model: model) }
             Section("Engine") {
-                LabeledContent("Status", value: model.engineStatus)
+                LabeledContent("Contact stream", value: model.engineStatus)
                 if !model.configurationIssue.isEmpty { Text("Actions paused: \(model.configurationIssue)").foregroundStyle(.orange) }
                 LabeledContent("Selected trackpad", value: model.devices.first { $0.id == model.activeDevice }?.name ?? "Disconnected")
                 LabeledContent("Foreground application", value: "\(model.foregroundName) • \(model.foreground)")
                 LabeledContent("Configured custom mappings", value: String(Gesture.all.filter { let m = model.savedConfig.mapping($0, app: model.foreground); return m.enabled && ![.none,.native].contains(m.action.kind) }.count))
-                LabeledContent("Ready custom mappings", value: String(Gesture.all.filter { model.savedConfig.blockedReason($0, mapping: model.savedConfig.mapping($0, app: model.foreground), device: model.activeDevice) == nil }.count))
-            }
-            Section("Permissions") {
-                permission("Accessibility", granted: model.accessibility, pane: accessibilityPane)
-                permission("Input Monitoring", granted: model.inputMonitoring, pane: inputPane)
+                LabeledContent("Ready custom mappings", value: String(model.readyMappingCount))
                 LabeledContent("Physical button observation", value: model.buttonObserver ? "Available" : "Unavailable — taps paused")
-                Button("Check / Request Permissions") { model.requestPermissions() }
-            }
-            Section("Get ready") {
-                Label(model.savedConfig.safety.nativeConflictsResolved ? "Native gesture setup confirmed" : "Native gesture setup required", systemImage: "checklist")
-                Label(model.savedConfig.calibrations[model.activeDevice]?.valid == true ? "Trackpad distance calibrated" : "Trackpad calibration required", systemImage: "ruler")
-                HStack { Button("Open Setup Assistant") { model.section = "Setup Assistant" }; Button("Calibrate Trackpad") { model.section = "Trackpad Calibration" } }
-                Text("Custom mappings remain paused until setup and calibration are complete. Native pass-through never sends synthetic desktop commands.").font(.caption).foregroundStyle(.secondary)
+                if !model.savedConfig.safety.tapConflictsResolved { Text("Custom taps also need the tap-conflict confirmation in Setup Assistant and Save.").font(.caption).foregroundStyle(.secondary) }
             }
             Section("Recovery") {
                 Text("Press Control–Option–Command–Escape anywhere to disable custom gestures. The menu bar switch and Quit remain available.")
@@ -104,10 +147,8 @@ struct DashboardView: View {
             }
         }.formStyle(.grouped)
     }
-    private func permission(_ name: String, granted: Bool, pane: String) -> some View {
-        HStack { Label(name, systemImage: granted ? "checkmark.circle.fill" : "exclamationmark.circle").foregroundStyle(granted ? .green : .orange); Spacer(); Button(granted ? "Open Settings" : "Grant Permission") { model.openSettings(pane) } }
-    }
 }
+
 struct GestureGrid: View {
     @ObservedObject var model: AppModel
     @State private var selected: Gesture?
@@ -427,8 +468,7 @@ struct SetupView: View {
     var body: some View {
         Form {
             Section("1 · Grant permissions") {
-                Text("Grant EvenBetterTouchTool.app Accessibility and Input Monitoring. These grants belong to the built app, independently of the old command-line daemon. Quit and reopen after changing Input Monitoring.")
-                HStack { Button("Request Permissions") { model.requestPermissions() }; Button("Accessibility") { model.openSettings(accessibilityPane) }; Button("Input Monitoring") { model.openSettings(inputPane) } }
+                PermissionControls(model: model)
             }
             Section("2 · Resolve native swipe conflicts") {
                 Text("In Trackpad → More Gestures:")

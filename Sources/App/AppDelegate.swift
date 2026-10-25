@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         installEmergencyHotkey()
         if !preview { model.start() }
         else { model.engineStatus = "UI preview — gesture engine not started"; model.foregroundChanged(); model.checkPermissions(); model.scanApplications() }
-        if preview || !model.savedConfig.safety.nativeConflictsResolved { openSettings() }
+        if preview || CommandLine.arguments.contains("--open-settings") || !model.savedConfig.safety.nativeConflictsResolved { openSettings() }
     }
     @objc private func toggle() { model.toggleFromMenu(); if model.hasPendingChanges { openSettings() } }
     @objc private func openSettings() {
