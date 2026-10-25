@@ -80,6 +80,7 @@ struct AppProfile: Codable, Equatable, Identifiable {
     var enabled = true
     var mappings: [String: Mapping] = [:]
     var sensitivity: Sensitivity? = nil
+    var rowEnabled: [String: Bool]? = nil
     var id: String { bundleID }
 }
 struct Safety: Codable, Equatable {
@@ -98,6 +99,7 @@ struct Configuration: Codable, Equatable {
     var safety = Safety()
     var mappings: [String: Mapping] = [:]
     var profiles: [AppProfile] = []
+    var rowEnabled: [String: Bool]? = nil
     // Explicit fallbacks are opt-in; the OS's configured shortcuts take precedence.
     var systemShortcuts: [String: Shortcut] = [:]
     static var defaults: Configuration {
@@ -131,7 +133,12 @@ struct Configuration: Codable, Equatable {
         return p
     }
     func profile(_ app: String) -> AppProfile? { profiles.first { $0.bundleID == app && $0.enabled } }
-    func mapping(_ g: Gesture, app: String) -> Mapping { profile(app)?.mappings[g.id] ?? mappings[g.id] ?? Mapping(enabled: false) }
+    func isRowEnabled(_ fingers: Int, app: String) -> Bool { profile(app)?.rowEnabled?[String(fingers)] ?? rowEnabled?[String(fingers)] ?? true }
+    func mapping(_ g: Gesture, app: String) -> Mapping {
+        var m = profile(app)?.mappings[g.id] ?? mappings[g.id] ?? Mapping(enabled: false)
+        if !isRowEnabled(g.fingers, app: app) { m.enabled = false }
+        return m
+    }
     func sensitivity(for app: String) -> Sensitivity { profile(app)?.sensitivity ?? sensitivity }
     func blockedReason(_ g: Gesture, mapping: Mapping, device: String) -> String? {
         if !enabled { return "Engine disabled" }
@@ -155,6 +162,7 @@ struct Configuration: Codable, Equatable {
         func validateShortcut(_ s: Shortcut) throws {
             try require(s.keyCode <= 127 && s.modifiers.allSatisfy { ["command", "option", "shift", "control", "fn"].contains($0) } && (0...2).contains(s.delay), "Invalid keyboard shortcut")
         }
+        try require((Array((rowEnabled ?? [:]).keys) + profiles.flatMap { Array(($0.rowEnabled ?? [:]).keys) }).allSatisfy { ["3","4"].contains($0) }, "Invalid finger row")
         try validate(sensitivity)
         try require(Set(profiles.map(\.bundleID)).count == profiles.count, "Duplicate app profiles")
         for p in profiles { if let s = p.sensitivity { try validate(s) } }

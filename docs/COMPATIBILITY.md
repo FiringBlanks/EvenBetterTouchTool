@@ -1,6 +1,6 @@
 # API choices and compatibility limits
 
-EvenBetterTouchTool 2.0 targets macOS 14 or later, Apple Silicon. It was compiled on macOS 26.6.2 with Swift 6.3.2, using Swift 5 language mode. Physical trackpad behavior on a 15-inch M4 MacBook Air remains a manual validation task.
+EvenBetterTouchTool 2.1 targets macOS 14 or later, Apple Silicon. It was compiled on macOS 26.6.2 with Swift 6.3.2, using Swift 5 language mode. Physical trackpad behavior on a 15-inch M4 MacBook Air remains a manual validation task.
 
 ## Contacts and physical distance
 
@@ -60,3 +60,7 @@ An exceptional burst above 64 intervals in a frame cancels that contact session.
 The stable bundle ID is `org.evenbettertouchtool.app`. The app is unsandboxed and locally ad-hoc signed by default. An ad-hoc signature is **not notarization** and does not establish a durable signing identity across changed builds. Use a consistent local Apple Development or Developer ID identity (`make SIGN='…'`) to improve grant continuity. Do not enable hardened runtime/library validation blindly: loading a private framework and posting input needs validation on the deployment target. Public distribution requires a developer to sign and notarize their own release. This build does not pretend to be notarized. Grant the actual installed app permissions; the old daemon's grants do not transfer. Re-add stale entries after an unsigned/ad-hoc rebuild if needed.
 
 Sources for contact ABI investigation: [M5MultitouchSupport's original header](https://github.com/mhuusko5/M5MultitouchSupport/blob/master/M5MultitouchSupport/M5MTDefinesInternal.h), [MultitouchSupport function declarations](https://github.com/machinarii/hypervibe/blob/main/MultitouchSupport.h), and the upstream `mt.h` attribution. [Apple's gestures reference](https://support.apple.com/en-us/102482) describes the user-visible native gestures. These sources inform implementation choices; they are not a macOS compatibility guarantee.
+
+## Saving settings
+
+Settings and start-at-login edits apply only after an explicit Save. Closing gesture popovers, switching sections, exporting saved settings, opening the JSON file, Reset, and Quit do not persist drafts. Gesture Save commits that cell only; the main Save commits other pending settings. Runtime safety pauses during calibration and emergency disable are immediate and temporary. Native OS permission/settings controls are separate user actions; the app does not save consent or calibration until Save. Row switches gate custom actions, preserve per-cell choices, and do not suppress native macOS gestures.

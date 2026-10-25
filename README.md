@@ -6,11 +6,11 @@ A free, MIT-licensed native SwiftUI menu bar app built from [firedev/threefinger
 
 ## Download and change settings
 
-Download the [Apple Silicon release ZIP](https://github.com/FiringBlanks/EvenBetterTouchTool/releases/download/v2.0.0/EvenBetterTouchTool-2.0.0-arm64.zip) from [GitHub Releases](https://github.com/FiringBlanks/EvenBetterTouchTool/releases). Extract it and run `Install.command` (or `./install.sh` in Terminal). The installer places the app in your Applications folder and safely stops the original threefinger service if present. The app is also included directly in the ZIP.
+Download the [Apple Silicon release ZIP](https://github.com/FiringBlanks/EvenBetterTouchTool/releases/download/v2.1.0/EvenBetterTouchTool-2.1.0-arm64.zip) from [GitHub Releases](https://github.com/FiringBlanks/EvenBetterTouchTool/releases). Extract it and run `Install.command` (or `./install.sh` in Terminal). The installer places the app in your Applications folder and safely stops the original threefinger service if present. The app is also included directly in the ZIP.
 
-Open **EvenBetterTouchTool** from Applications. Click its **hand icon in the menu bar → Open Settings**. In **Gestures**, choose Global or an app profile, then click a gesture cell to change its action. Use **Applications** for per-app overrides and **Sensitivity** for distance/tap settings. Edits save automatically. Complete Setup Assistant, permissions, and calibration before using custom input.
+Open **EvenBetterTouchTool** from Applications. Click its **hand icon in the menu bar → Open Settings**. In **Gestures**, choose Global or an app profile, then click a gesture cell to change its action. Use **Applications** for per-app overrides and **Sensitivity** for distance/tap settings. Edits stay pending until you click **Save**. **Reset** discards pending edits. Complete Setup Assistant, permissions, and calibration before using custom input.
 
-This initial release is **experimental, locally ad-hoc signed, and not notarized**. Physical trackpad acceptance tests are still pending; see the compatibility and test documents below. macOS may require you to explicitly allow the downloaded app through its normal Privacy & Security controls. The installer does not bypass Gatekeeper or change privacy/gesture preferences.
+This release is **experimental, locally ad-hoc signed, and not notarized**. Physical trackpad acceptance tests are still pending; see the compatibility and test documents below. macOS may require you to explicitly allow the downloaded app through its normal Privacy & Security controls. The installer does not bypass Gatekeeper or change privacy/gesture preferences.
 
 ## Build and install locally
 
@@ -22,7 +22,7 @@ make package     # installable ZIP plus SHA-256 checksum
 ./install.sh
 ```
 
-The compiled app is `build/EvenBetterTouchTool.app`. Installation defaults to `~/Applications/EvenBetterTouchTool.app`. Use `./install.sh --destination /Applications` if you prefer the system Applications folder and have write access. The package is `build/EvenBetterTouchTool-2.0.0-arm64.zip`; unzip and run the included `Install.command` or `install.sh`. It contains the built app and does not need to download or recompile anything. A `.dmg` is unnecessary: the ZIP includes a complete signed `.app`, installer, uninstaller, and documentation.
+The compiled app is `build/EvenBetterTouchTool.app`. Installation defaults to `~/Applications/EvenBetterTouchTool.app`. Use `./install.sh --destination /Applications` if you prefer the system Applications folder and have write access. The package is `build/EvenBetterTouchTool-2.1.0-arm64.zip`; unzip and run the included `Install.command` or `install.sh`. It contains the built app and does not need to download or recompile anything. A `.dmg` is unnecessary: the ZIP includes a complete signed `.app`, installer, uninstaller, and documentation.
 
 The installer stages and verifies the replacement **before** stopping the old utility. It unloads the known original/Homebrew user LaunchAgents, archives their plists and existing config under `~/.config/threefinger-migration/`, then stops only exact-name same-user legacy processes. It preserves old CLI binaries, the Homebrew formula, configuration, and previous app backups. It refuses an unrelated app at the destination or a duplicate copy in the standard Applications locations. It never runs upstream `threefinger --reinstall` or downloads the original release. Root-owned/custom-labeled daemons must be stopped separately if you installed one yourself.
 
@@ -34,7 +34,7 @@ Do not run `brew services start/upgrade threefinger` alongside this app. If you 
 2. Complete **Setup Assistant**: turn native Mission Control/App Exposé trackpad swipes OFF, retain four-finger horizontal full-screen switching, restrict page swipes to two fingers or Off, and turn three-finger dragging OFF. Custom taps additionally require Look Up and Tap to click OFF. The full table and reasoning are in [COMPATIBILITY.md](docs/COMPATIBILITY.md). The app does not alter system preferences or suppress native gestures automatically.
 3. Verify keyboard shortcuts for Mission Control and Application windows. If the app cannot read a configured shortcut, set a user-verified fallback under General → System Shortcuts. No Control–Arrow shortcut is silently assumed.
 4. Open **Trackpad Calibration**. Calibrate X and Y separately using ruler-measured travel, or enter measured active-surface dimensions. Raw normalized/sensor coordinates are not millimeters. No custom gesture runs until the selected device is calibrated and native conflict setup is confirmed.
-5. Enable **Start at Login** under General if desired. macOS Login Items manages startup; no second LaunchAgent is installed.
+5. Click **Save** to apply setup/calibration. Enable **Start at Login** under General and click Save if desired. macOS Login Items manages startup; no second LaunchAgent is installed.
 
 **Emergency disable: Control–Option–Command–Escape.** The menu bar also provides Enable/Disable, Open Settings, Diagnostics, and Quit. If the emergency shortcut cannot register because another application owns it, the app warns you; use the menu bar switch.
 
@@ -67,7 +67,13 @@ Chrome uses Command–Option–Arrow. Finder uses Control–Tab / Control–Shif
 
 ### Persistence
 
-Configuration remains at `~/.config/threefinger.json` with `schemaVersion: 2`. GUI changes apply immediately and save using atomic replacement after a brief debounce. Valid external edits reload within two seconds when a GUI save is not pending. Invalid changes are reported; imports validate before applying and save a pre-import backup. Imported local consent/calibration is cleared so a foreign profile cannot silently authorize conflicting native input or a different trackpad scale. Export includes the complete saved configuration. Restore Defaults saves a backup first. Configuration errors are visible, not silently discarded.
+Configuration remains at `~/.config/threefinger.json` with `schemaVersion: 2`. All changes are drafts until you click **Save**, including sensitivity, row/profile toggles, master enable, startup at login, imports, restored defaults, calibration, and setup confirmations. The engine continues using saved settings while you edit. Each explicit Save backs up the existing file and writes atomically. Quitting, closing a popup, exporting saved settings, and opening the configuration file never save pending edits.
+
+Gesture editors have a close button and dismiss when you click outside or press Escape; those dismissal paths discard local edits. The editor’s blue **Save** commits only that gesture and leaves unrelated edits pending. Its **Reset** restores the values from when the editor opened; **Restore Default** stages the default for that gesture. The main window’s **Reset** discards all pending changes, and its **Save** applies all remaining pending settings.
+
+Click the hand in the **Fingers** column to stage enabling/disabling the entire three- or four-finger row. Disabled rows are dimmed and marked Off. Individual mappings are preserved when a row is re-enabled; unsupported clicks remain unsupported. Per-app row choices override global row choices. A row switch only gates custom actions; native macOS gestures cannot be disabled by this app.
+
+Valid external JSON edits reload within two seconds. If an external edit arrives while drafts exist, the app retains them and asks you to Reset and review the saved configuration before saving, preventing accidental overwrites. Invalid external edits pause custom actions. Imported local consent/calibration is cleared, and imports remain pending until Save. Export writes only the saved configuration. **Emergency disable is immediate and temporary**; it never writes settings implicitly. Click Save to persist a disabled master switch.
 
 Diagnostics displays raw contacts, calibrated movement, recognized gesture, block/cancellation reason, action/result, foreground app, sensitivity, timestamp, and device status. Optional action logging is bounded to 250 in-memory entries; no typed content is logged. Copy Diagnostics puts current diagnostic information on the clipboard only when requested.
 
@@ -91,13 +97,15 @@ The upstream MIT license and `mt.h` attribution are retained. Original daemon so
 - `Sources/Core/CalibrationTrial.swift`: validated single-stroke, separate-axis calibration.
 - `Sources/Core/Configuration.swift`: schema, defaults, profiles, validation, safety gates.
 - `Sources/Core/ConfigurationStore.swift`: atomic persistence, import, backed-up legacy migration.
+- `Sources/Core/SettingsDraft.swift`: pending edits, scoped gesture saves, external-edit conflicts, and row switches.
 - `Sources/Core/GestureEngine.swift`: pure recognition and reusable command planning.
 - `Sources/App/TrackpadDriver.swift`: runtime contact bridge, device selection, serial processing, button observation, lifecycle.
 - `Sources/App/ActionExecutor.swift`: keyboard/media/mouse events, Finder checks, Core Audio, configured system shortcuts.
 - `Sources/App/AppModel.swift`: live settings, permissions, profiles, calibration, diagnostics.
 - `Sources/App/AppDelegate.swift`: app singleton, menu bar, window, emergency hotkey.
 - `Sources/App/SettingsViews.swift`: native graphical interface.
-- `Tests/CoreTests.swift`: deterministic recognition/configuration/command tests.
+- `Tests/CoreTests.swift`: deterministic recognition/configuration/command/draft tests.
+- `Tests/AppModelTests.swift`: save-only persistence, reset/import/quit/startup/emergency behavior against the actual app model.
 - `Resources/`, `scripts/`, `Makefile`, `main.swift`: app metadata/icon, local packaging/migration, build and entry point.
 
 Add new actions through `ActionKind`, `ActionPlanner`, the executor, and parameter controls; recognition does not depend on their system implementation. The callback copies only a bounded contact frame, processes on a serial queue, and publishes UI state at a limited rate. A single selected device prevents duplicate engines and cross-device mixing.

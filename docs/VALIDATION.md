@@ -3,9 +3,9 @@
 ## Artifacts
 
 - Standalone Apple Silicon application: `build/EvenBetterTouchTool.app`
-- Installable archive: `build/EvenBetterTouchTool-2.0.0-arm64.zip`
-- Archive checksum: `build/EvenBetterTouchTool-2.0.0-arm64.zip.sha256`
-- Raw local build/test log: `build/check.log`
+- Installable archive: `build/EvenBetterTouchTool-2.1.0-arm64.zip`
+- Archive checksum: `build/EvenBetterTouchTool-2.1.0-arm64.zip.sha256`
+- Raw local build/test log: `build/qol-check.log`
 - Double-click installer: `Install.command`
 - Local installer: `install.sh` (inspect using `./install.sh --dry-run` first)
 - Uninstaller: `uninstall.sh`
@@ -19,7 +19,7 @@ Build host: Apple Silicon, macOS 26.6.2, Swift 6.3.2, Command Line Tools. Target
 `make check` completed successfully:
 
 - Native application compilation: PASS, no compiler warnings.
-- Deterministic automated core suite: **80 passed, 0 failed**.
+- Deterministic automated core suite: **97 core tests + 12 app-model tests passed, 0 failed**.
 - `--smoke-test`: PASS (default schema validation and AppKit-linked executable startup).
 - `codesign --verify --strict`: PASS.
 - App `Info.plist` validation: PASS.
@@ -27,7 +27,7 @@ Build host: Apple Silicon, macOS 26.6.2, Swift 6.3.2, Command Line Tools. Target
 
 The test suite covers three/four-finger recognition, directions, 10 mm → 10 tab intervals, fractional accumulation, submillimeter samples, reversal, stationary input, cancellation, count/identity changes, staggered landing/release, taps versus swipes, physical-button tap cancellation, invalid/duplicate/noisy frames, direction locking, jitter, profiles/global fallback, mapping thresholds, safety gates/native pass-through, dedicated media command encoding, volume steps/clamping, application shortcut targeting, sequence planning, atomic config persistence, migration/import backups, schema/range rejection, import consent reset, and independent single-stroke X/Y calibration.
 
-UI checks used `--ui-preview`, which uses a temporary disabled configuration and never starts the contact driver. All eight settings sections were opened. The gesture grid and editor, profile icons/edit controls, calibration interface, native setup instructions, General controls, sensitivity controls, and diagnostics interface were inspected. A volume-step override was changed using the real text field; `3.00` was reflected in the control and persisted as `3` in the isolated JSON. Standard Select All and Quit were verified. No live media, input, system volume, permission, or login action was invoked during this UI check.
+UI checks used `--ui-preview`, which uses a temporary disabled configuration and never starts the contact driver. All eight settings sections were opened. The gesture grid and editor, profile icons/edit controls, calibration interface, native setup instructions, General controls, sensitivity controls, and diagnostics interface were inspected. A volume-step override was changed using the real text field; `3.00` was reflected in the control and persisted as `3` in the isolated JSON. Standard Select All and Quit were verified. The 2.1 settings preview additionally verified outside-click and X dismissal without saving, editor Reset, gesture-only Save while another row edit remained pending, global row Save, row dimming/On-Off indicators, pending sensitivity edits, global Reset, dynamic Enabled/Disabled labels, and Quit discarding an unsaved row edit. The real configuration stayed byte-for-byte unchanged during these isolated checks. No live media, input, system volume, permission, or login action was invoked during these UI checks.
 
 The installer dry run successfully detected the original exact-name same-user daemon at `~/.local/bin/threefinger` and its `com.firedev.threefinger.plist` LaunchAgent. It reported the migration plan without stopping, moving, installing, or replacing anything. A subsequent real installation successfully performed legacy migration and opened EvenBetterTouchTool. Uninstall side effects remain a manual acceptance test.
 
@@ -55,12 +55,14 @@ New implementation:
 - `Sources/Core/Configuration.swift`
 - `Sources/Core/ConfigurationStore.swift`
 - `Sources/Core/GestureEngine.swift`
+- `Sources/Core/SettingsDraft.swift`
 - `Sources/App/ActionExecutor.swift`
 - `Sources/App/AppDelegate.swift`
 - `Sources/App/AppModel.swift`
 - `Sources/App/SettingsViews.swift`
 - `Sources/App/TrackpadDriver.swift`
 - `Tests/CoreTests.swift`
+- `Tests/AppModelTests.swift`
 - `Resources/Info.plist`
 - `Resources/AppIcon.icns`
 - `scripts/create-icon.swift`
@@ -81,3 +83,7 @@ Upstream references preserved, never built or invoked:
 - `Legacy/README.md`
 
 `mt.h` and its upstream ABI attribution are reused unchanged. The MIT `LICENSE` is retained and included in the application and package. Existing demo media remain unchanged.
+
+## 2.1 save-only regression coverage
+
+The app-model tests instantiate the actual model with temporary configuration files, without starting hardware callbacks. They verify that editing and waiting, Quit, Reset, staged imports, restored defaults, row switches, login startup selection, emergency pause, invalid saves, and device discovery never implicitly overwrite saved settings. Explicit Save and scoped gesture Save are tested against real atomic JSON writes. Core tests additionally cover per-app row priority, preservation of individually disabled/unsupported mappings, pending edit conflicts, and new-profile gesture saves.

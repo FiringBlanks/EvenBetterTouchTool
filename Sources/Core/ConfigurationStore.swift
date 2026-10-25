@@ -3,13 +3,13 @@ import Foundation
 final class ConfigurationStore {
     let url: URL
     init(url: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/threefinger.json")) { self.url = url }
-    func load() throws -> Configuration {
-        guard FileManager.default.fileExists(atPath: url.path) else { let c = Configuration.defaults; try save(c); return c }
+    func load(persistMigration: Bool = true) throws -> Configuration {
+        guard FileManager.default.fileExists(atPath: url.path) else { let c = Configuration.defaults; if persistMigration { try save(c) }; return c }
         let data = try Data(contentsOf: url)
         if let root = try JSONSerialization.jsonObject(with: data) as? [String: Any], root["schemaVersion"] == nil {
             let legacy = try JSONDecoder().decode(Legacy.self, from: data)
             let backup = url.deletingLastPathComponent().appendingPathComponent("threefinger.legacy-\(UUID().uuidString).json")
-            try data.write(to: backup, options: .atomic)
+            if persistMigration { try data.write(to: backup, options: .atomic) }
             var c = Configuration.defaults
             // Preserve explicit legacy sequences globally. Legacy normalized thresholds
             // cannot be converted to mm before calibration; retain them in the backup.
@@ -23,7 +23,7 @@ final class ConfigurationStore {
                 // Preserve the old user's intent instead of masking it with new app defaults.
                 for i in c.profiles.indices { c.profiles[i].mappings.removeValue(forKey: Gesture(fingers: 3, direction: direction).id) }
             }
-            try save(c)
+            if persistMigration { try save(c) }
             return c
         }
         return try JSONDecoder().decode(Configuration.self, from: data).validated()
@@ -34,9 +34,13 @@ final class ConfigurationStore {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(config).write(to: url, options: .atomic)
     }
-    func importFile(_ source: URL) throws -> Configuration {
+    func readImport(_ source: URL) throws -> Configuration {
         var c = try JSONDecoder().decode(Configuration.self, from: Data(contentsOf: source)).validated()
         c.safety = Safety(); c.calibrations = [:]; c.selectedDevice = ""
+        return c
+    }
+    func importFile(_ source: URL) throws -> Configuration {
+        let c = try readImport(source)
         if FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.copyItem(at: url, to: url.deletingLastPathComponent().appendingPathComponent("threefinger.pre-import-\(UUID().uuidString).json"))
         }

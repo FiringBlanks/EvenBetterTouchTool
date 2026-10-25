@@ -19,7 +19,7 @@ struct SettingsRoot: View {
                     ForEach(sections, id: \.0) { item in Label(item.0, systemImage: item.1).tag(item.0).padding(.vertical,5) }
                 }.listStyle(.sidebar)
                 VStack(alignment: .leading, spacing: 5) {
-                    Label(model.config.enabled ? "Gestures enabled" : "Gestures paused", systemImage: model.config.enabled ? "circle.fill" : "pause.circle.fill").foregroundStyle(model.config.enabled ? .green : .orange)
+                    Label(model.savedConfig.enabled && !model.runtimePaused ? "Gestures enabled" : "Gestures paused", systemImage: model.savedConfig.enabled && !model.runtimePaused ? "circle.fill" : "pause.circle.fill").foregroundStyle(model.savedConfig.enabled && !model.runtimePaused ? .green : .orange)
                     Text("⌃⌥⌘ Esc • Emergency disable").font(.caption2).foregroundStyle(.secondary)
                 }.font(.caption).padding(16)
             }.navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 250)
@@ -31,13 +31,23 @@ struct SettingsRoot: View {
                         Text(subtitle).font(.callout).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Toggle("Enable", isOn: $model.config.enabled).toggleStyle(.switch).accessibilityLabel("Enable gesture engine")
+                    Toggle(model.config.enabled ? "Enabled" : "Disabled", isOn: $model.config.enabled).toggleStyle(.switch).accessibilityLabel("Enable gesture engine")
                 }.padding(24)
                 Divider()
                 if !model.message.isEmpty {
                     HStack { Image(systemName:"exclamationmark.triangle"); Text(model.message).font(.caption); Spacer(); Button("Dismiss") { model.message = "" } }.padding(12).background(.orange.opacity(0.12))
                 }
                 detail
+                Divider()
+                HStack(spacing: 12) {
+                    Text(model.editing.externalConflict ? "External changes — Reset to review" : model.hasPendingChanges ? "Unsaved changes" : model.runtimePaused ? "Emergency pause active" : "All changes saved")
+                        .font(.caption).foregroundStyle(model.hasPendingChanges || model.editing.externalConflict ? .orange : .secondary)
+                    Spacer()
+                    Button("Reset") { model.resetEdits() }.disabled(!model.hasPendingChanges && !model.editing.externalConflict)
+                    Button("Save") { NSApp.keyWindow?.makeFirstResponder(nil); DispatchQueue.main.async { model.save() } }
+                        .buttonStyle(.borderedProminent).disabled(!model.canSave || model.calibrationAxis != nil)
+                        .keyboardShortcut("s", modifiers: .command)
+                }.padding(.horizontal, 24).padding(.vertical, 14)
             }.background(Color(nsColor: .windowBackgroundColor))
         }.frame(minWidth: 940, minHeight: 660)
     }
@@ -72,8 +82,8 @@ struct DashboardView: View {
                 if !model.configurationIssue.isEmpty { Text("Actions paused: \(model.configurationIssue)").foregroundStyle(.orange) }
                 LabeledContent("Selected trackpad", value: model.devices.first { $0.id == model.activeDevice }?.name ?? "Disconnected")
                 LabeledContent("Foreground application", value: "\(model.foregroundName) • \(model.foreground)")
-                LabeledContent("Configured custom mappings", value: String(Gesture.all.filter { let m = model.config.mapping($0, app: model.foreground); return m.enabled && ![.none,.native].contains(m.action.kind) }.count))
-                LabeledContent("Ready custom mappings", value: String(Gesture.all.filter { model.config.blockedReason($0, mapping: model.config.mapping($0, app: model.foreground), device: model.activeDevice) == nil }.count))
+                LabeledContent("Configured custom mappings", value: String(Gesture.all.filter { let m = model.savedConfig.mapping($0, app: model.foreground); return m.enabled && ![.none,.native].contains(m.action.kind) }.count))
+                LabeledContent("Ready custom mappings", value: String(Gesture.all.filter { model.savedConfig.blockedReason($0, mapping: model.savedConfig.mapping($0, app: model.foreground), device: model.activeDevice) == nil }.count))
             }
             Section("Permissions") {
                 permission("Accessibility", granted: model.accessibility, pane: accessibilityPane)
@@ -82,8 +92,8 @@ struct DashboardView: View {
                 Button("Check / Request Permissions") { model.requestPermissions() }
             }
             Section("Get ready") {
-                Label(model.config.safety.nativeConflictsResolved ? "Native gesture setup confirmed" : "Native gesture setup required", systemImage: "checklist")
-                Label(model.config.calibrations[model.activeDevice]?.valid == true ? "Trackpad distance calibrated" : "Trackpad calibration required", systemImage: "ruler")
+                Label(model.savedConfig.safety.nativeConflictsResolved ? "Native gesture setup confirmed" : "Native gesture setup required", systemImage: "checklist")
+                Label(model.savedConfig.calibrations[model.activeDevice]?.valid == true ? "Trackpad distance calibrated" : "Trackpad calibration required", systemImage: "ruler")
                 HStack { Button("Open Setup Assistant") { model.section = "Setup Assistant" }; Button("Calibrate Trackpad") { model.section = "Trackpad Calibration" } }
                 Text("Custom mappings remain paused until setup and calibration are complete. Native pass-through never sends synthetic desktop commands.").font(.caption).foregroundStyle(.secondary)
             }
@@ -108,34 +118,46 @@ struct GestureGrid: View {
                     Text("Global").tag("")
                     ForEach(model.config.profiles) { p in Text(p.name).tag(p.bundleID) }
                 }.pickerStyle(.menu)
-                Text(model.selectedProfile.isEmpty ? "Global mappings apply unless an enabled app profile overrides them." : "Unedited cells inherit the global mapping. Edit a cell to create an override; Restore Default removes it.").font(.callout).foregroundStyle(.secondary)
+                Text("Click a gesture to edit it. Click a hand to enable or disable its row.").font(.callout).foregroundStyle(.secondary)
                 Grid(horizontalSpacing: 8, verticalSpacing: 12) {
                     GridRow { Text("Fingers").font(.caption); ForEach(Direction.allCases, id: \.self) { Text($0.title).font(.caption.weight(.semibold)).frame(maxWidth: .infinity) } }
                     ForEach([3,4], id: \.self) { fingers in
                         GridRow {
-                            VStack { Image(systemName: "hand.draw").font(.title2); Text("\(fingers)").font(.title.bold()) }.frame(width: 46)
-                            ForEach(Direction.allCases, id: \.self) { d in
-                                cell(Gesture(fingers: fingers, direction: d))
-                            }
+                            rowToggle(fingers)
+                            ForEach(Direction.allCases, id: \.self) { d in cell(Gesture(fingers: fingers, direction: d)) }
                         }
                     }
                 }
-                Label("Physical click mappings are disabled: this build cannot reliably correlate and suppress a trackpad press on Tahoe.", systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
-                Text("Continuous actions use physical distance. One-shot actions fire once until all fingers lift. A small settling window allows fingers to land together.").font(.caption).foregroundStyle(.secondary)
+                Label("Physical click remapping is unavailable. Native pass-through is unaffected by row switches.", systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
             }.padding(24)
-        }.sheet(item: $selected) { g in MappingEditor(model: model, gesture: g).frame(width: 640, height: 700) }
+        }.popover(item: $selected, arrowEdge: .bottom) { g in
+            MappingEditor(model: model, gesture: g, profileID: model.selectedProfile).frame(width: 600, height: 620)
+        }
+    }
+    private func rowToggle(_ fingers: Int) -> some View {
+        let enabled = model.rowEnabled(fingers)
+        return Button { model.toggleRow(fingers) } label: {
+            VStack(spacing: 6) {
+                Image(systemName: enabled ? "hand.draw.fill" : "hand.draw").font(.title2)
+                Text("\(fingers)").font(.title.bold())
+                HStack(spacing: 3) { Circle().frame(width: 5, height: 5); Text(enabled ? "On" : "Off").font(.caption2) }
+            }.foregroundStyle(enabled ? Color.accentColor : Color.secondary).frame(width: 52, height: 116)
+                .background(enabled ? Color.accentColor.opacity(0.08) : Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+        }.buttonStyle(.plain).accessibilityLabel("\(fingers)-finger row: \(enabled ? "Enabled" : "Disabled")")
+            .help("\(enabled ? "Disable" : "Enable") all \(fingers)-finger custom gestures. Click Save to apply.")
     }
     private func cell(_ g: Gesture) -> some View {
-        let m = model.mapping(g)
+        let m = model.mapping(g), rowEnabled = model.rowEnabled(g.fingers)
         return Button { selected = g } label: {
             VStack(spacing: 8) {
                 Image(systemName: symbol(g.direction)).font(.title3)
                 Text(m.action.kind.title).font(.caption.weight(.medium)).multilineTextAlignment(.center).frame(maxWidth: .infinity, minHeight: 32)
-                Text(g.direction == .click ? "Unsupported" : !m.enabled ? "Disabled" : m.continuous && m.action.kind.repeatable ? "Continuous" : "Single").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text(g.direction == .click ? "Unsupported" : !rowEnabled ? "Row disabled" : !m.enabled ? "Disabled" : m.continuous && m.action.kind.repeatable ? "Continuous" : "Single").font(.system(size: 10)).foregroundStyle(.secondary)
             }.padding(10).frame(maxWidth: .infinity, minHeight: 120)
-                .background(m.enabled && g.direction != .click ? Color.accentColor.opacity(0.09) : Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                .background(rowEnabled && m.enabled && g.direction != .click ? Color.accentColor.opacity(0.09) : Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.secondary.opacity(0.15)))
-        }.buttonStyle(.plain).accessibilityLabel("\(g.title): \(m.action.kind.title)")
+                .opacity(rowEnabled ? 1 : 0.5)
+        }.buttonStyle(.plain).accessibilityLabel("\(g.title): \(m.action.kind.title)\(rowEnabled ? "" : ", row disabled")")
     }
     private func symbol(_ d: Direction) -> String {
         switch d { case .left: return "arrow.left"; case .right: return "arrow.right"; case .up: return "arrow.up"; case .down: return "arrow.down"; case .tap: return "hand.tap"; case .click: return "cursorarrow.click" }
@@ -144,43 +166,81 @@ struct GestureGrid: View {
 struct MappingEditor: View {
     @ObservedObject var model: AppModel
     let gesture: Gesture
+    let profileID: String
+    private let initial: Mapping
+    private let initiallyInherited: Bool
+    @State private var draft: Mapping
+    @State private var inherited: Bool
+    @State private var error = ""
     @Environment(\.dismiss) private var dismiss
-    private var mapping: Binding<Mapping> { Binding(get: { model.mapping(gesture) }, set: { model.setMapping($0, gesture: gesture) }) }
+    init(model: AppModel, gesture: Gesture, profileID: String) {
+        self.model = model; self.gesture = gesture; self.profileID = profileID
+        let mapping = model.editing.mapping(gesture, profileID: profileID)
+        let inherit = !profileID.isEmpty && model.editing.override(gesture, profileID: profileID) == nil
+        initial = mapping; initiallyInherited = inherit
+        _draft = State(initialValue: mapping); _inherited = State(initialValue: inherit)
+    }
+    private var changed: Bool { draft != initial || inherited != initiallyInherited }
     var body: some View {
         VStack(spacing: 0) {
-            HStack { VStack(alignment:.leading) { Text(gesture.title.capitalized).font(.title2.bold()); Text(model.selectedProfile.isEmpty ? "Global configuration" : model.selectedProfile).font(.caption).foregroundStyle(.secondary) }; Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction) }.padding(20)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(gesture.title.capitalized).font(.title2.bold())
+                    Text(profileID.isEmpty ? "Global configuration" : model.config.profiles.first { $0.bundleID == profileID }?.name ?? profileID).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button { dismiss() } label: { Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary) }
+                    .buttonStyle(.plain).accessibilityLabel("Close without saving").help("Close without saving").keyboardShortcut(.cancelAction)
+            }.padding(20)
             Divider()
             Form {
-                if gesture.direction == .click {
-                    Section { Text("Physical multi-finger click remapping is unavailable. MultitouchSupport provides contacts, but pressure/density fields are not a reliable press signal. Mouse events do not identify their originating device, so intercepting them could swallow another mouse's click. Normal physical clicks remain native; they cancel tap recognition.") }
-                }
+                if gesture.direction == .click { Section { Text("Physical click remapping is unavailable. Normal physical clicks remain native and cancel custom taps.") } }
+                if !profileID.isEmpty { Section { Toggle("Use global mapping", isOn: $inherited) } }
                 Section("Action") {
-                    Toggle("Enable this gesture", isOn: mapping.enabled).disabled(gesture.direction == .click)
-                    Picker("Assigned action", selection: mapping.action.kind) {
+                    Toggle("Enable this gesture", isOn: $draft.enabled)
+                    Picker("Assigned action", selection: $draft.action.kind) {
                         ForEach(["Navigation","Media / System","Mouse / Keyboard","Applications","Miscellaneous"], id: \.self) { category in
                             Section(category) { ForEach(ActionKind.allCases.filter { $0.category == category }) { kind in Text(kind.title).tag(kind) } }
                         }
-                    }.disabled(gesture.direction == .click)
-                    ActionParameters(action: mapping.action, model: model)
-                    if mapping.wrappedValue.action.kind == .notificationCenter { Text("No stable public API opens Notification Center. Assign a custom shortcut after configuring one in macOS Keyboard Shortcuts.").foregroundStyle(.orange) }
-                }
+                    }
+                    ActionParameters(action: $draft.action, model: model)
+                    if draft.action.kind == .notificationCenter { Text("Assign a custom keyboard shortcut to open Notification Center.").foregroundStyle(.orange) }
+                }.disabled(gesture.direction == .click || inherited)
                 if gesture.direction.isSwipe {
                     Section("Movement") {
-                        Toggle("Continuous distance-based actions", isOn: mapping.continuous).disabled(!mapping.wrappedValue.action.kind.repeatable)
-                        Text(mapping.wrappedValue.action.kind.repeatable ? "No time-based repeat. Movement stops → actions stop." : "This action fires once per contact session to avoid overlapping system animations.").font(.caption).foregroundStyle(.secondary)
-                        Toggle("Override distance interval", isOn: Binding(get: { mapping.wrappedValue.distanceMM != nil }, set: { mapping.wrappedValue.distanceMM = $0 ? 1 : nil }))
-                        if mapping.wrappedValue.distanceMM != nil { NumericSlider(title: "Distance per action", value: Binding(get: { mapping.wrappedValue.distanceMM ?? 1 }, set: { mapping.wrappedValue.distanceMM = $0 }), range: 0.5...20, unit: "mm") }
-                        Toggle("Use opposite direction's mapping", isOn: mapping.reverse)
-                        NumericSlider(title: "Cooldown (distance during cooldown is discarded)", value: mapping.cooldown, range: 0...5, unit: "s")
-                    }
+                        Toggle("Continuous", isOn: $draft.continuous).disabled(!draft.action.kind.repeatable)
+                        Toggle("Override distance", isOn: Binding(get: { draft.distanceMM != nil }, set: { draft.distanceMM = $0 ? 1 : nil }))
+                        if draft.distanceMM != nil { NumericSlider(title: "Distance per action", value: Binding(get: { draft.distanceMM ?? 1 }, set: { draft.distanceMM = $0 }), range: 0.5...20, unit: "mm") }
+                        Toggle("Reverse direction", isOn: $draft.reverse)
+                        NumericSlider(title: "Cooldown", value: $draft.cooldown, range: 0...5, unit: "s").help("Movement during a cooldown is discarded.")
+                    }.disabled(inherited)
                 }
-                Section("Availability") {
-                    Text(model.config.blockedReason(gesture, mapping: mapping.wrappedValue, device: model.activeDevice) ?? "Ready when required permissions are granted").font(.callout)
-                    if gesture.fingers == 4 && [.left,.right].contains(gesture.direction) { Text("Custom reassignment requires disabling native “Swipe between full-screen applications” in System Settings and confirming it in Setup Assistant. Native pass-through never sends a desktop shortcut.").foregroundStyle(.orange) }
-                    Button("Restore Default") { model.restoreMapping(gesture) }
+                Section {
+                    if gesture.fingers == 4 && [.left,.right].contains(gesture.direction) && draft.action.kind != .native {
+                        Text("Disable native desktop swipes in Setup Assistant before assigning a custom action.").font(.caption).foregroundStyle(.orange)
+                    }
+                    Button("Restore Default") { restoreDefault() }
+                    if !error.isEmpty { Text(error).font(.caption).foregroundStyle(.red) }
                 }
             }.formStyle(.grouped)
+            Divider()
+            HStack {
+                Button("Reset") { draft = initial; inherited = initiallyInherited; error = "" }.disabled(!changed)
+                Spacer()
+                Button("Save") {
+                    NSApp.keyWindow?.makeFirstResponder(nil)
+                    DispatchQueue.main.async {
+                        if model.saveMapping(inherited ? nil : draft, gesture: gesture, profileID: profileID) { dismiss() }
+                        else { error = model.message }
+                    }
+                }.buttonStyle(.borderedProminent).disabled(!changed)
+            }.padding(16)
         }
+    }
+    private func restoreDefault() {
+        let value = profileID.isEmpty ? Configuration.defaults.mappings[gesture.id] : Configuration.defaultProfile(profileID, name: "").mappings[gesture.id]
+        inherited = !profileID.isEmpty && value == nil
+        draft = value ?? model.config.mappings[gesture.id] ?? Mapping(enabled: false)
     }
 }
 struct ActionParameters: View {
@@ -194,23 +254,27 @@ struct ActionParameters: View {
             }
             if [.openApplication,.activateApplication,.applicationShortcut].contains(action.kind) {
                 TextField("Application bundle ID", text: $action.bundleID)
-                Button("Choose Application…") { model.chooseApplication { id, _ in action.bundleID = id } }
+                Picker("Application", selection: $action.bundleID) {
+                    Text("Choose application").tag("")
+                    if !action.bundleID.isEmpty && !model.installed.contains(where: { $0.id == action.bundleID }) { Text(action.bundleID).tag(action.bundleID) }
+                    ForEach(model.installed) { app in Text(app.name).tag(app.id) }
+                }
             }
             if [.shortcut,.sequence,.applicationShortcut].contains(action.kind) {
                 ForEach(action.kind == .shortcut ? Array(action.shortcuts.indices.prefix(1)) : Array(action.shortcuts.indices), id: \.self) { i in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack { Text("Shortcut \(i+1)").font(.headline); Spacer(); if action.shortcuts.count > 1 { Button("Remove") { action.shortcuts.remove(at: i) } } }
-                        ShortcutControls(shortcut: $action.shortcuts[i])
+                        ShortcutControls(shortcut: $action.shortcuts[i], showDelay: action.kind != .shortcut && action.shortcuts.count > 1)
                     }.padding(.vertical,6)
                 }
                 if action.kind != .shortcut { Button("Add Shortcut") { if action.shortcuts.count < 32 { action.shortcuts.append(Shortcut()) } } }
-                Text("Sequences run in order, once per gesture, and cancel when focus or settings change. Key codes use the Mac ANSI layout; modifiers apply to every key-down/up pair.").font(.caption).foregroundStyle(.secondary)
             }
         }
     }
 }
 struct ShortcutControls: View {
     @Binding var shortcut: Shortcut
+    var showDelay = false
     var body: some View {
         Picker("Key", selection: $shortcut.keyCode) {
             ForEach(KeyCodes.values.keys.sorted(), id: \.self) { key in Text(key.replacingOccurrences(of:"_", with:" ")).tag(KeyCodes.values[key]!) }
@@ -220,7 +284,7 @@ struct ShortcutControls: View {
                 Toggle(name == "control" ? "⌃" : name == "option" ? "⌥" : name == "shift" ? "⇧" : name == "command" ? "⌘" : "fn", isOn: Binding(get: { shortcut.modifiers.contains(name) }, set: { enabled in shortcut.modifiers.removeAll { $0 == name }; if enabled { shortcut.modifiers.append(name) } })).accessibilityLabel(name)
             }
         }
-        NumericSlider(title: "Delay after key in sequence", value: $shortcut.delay, range: 0...2, unit: "s")
+        if showDelay { NumericSlider(title: "Step delay", value: $shortcut.delay, range: 0...2, unit: "s") }
     }
 }
 struct NumericSlider: View {
@@ -229,32 +293,34 @@ struct NumericSlider: View {
     var range: ClosedRange<Double>
     var unit: String
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title).font(.callout)
-            HStack {
-                Slider(value: $value, in: range).accessibilityLabel(title)
-                TextField(title, value: Binding(get: { value }, set: { if $0.isFinite { value = min(range.upperBound,max(range.lowerBound,$0)) } }), format: .number.precision(.fractionLength(2))).frame(width: 65).textFieldStyle(.roundedBorder).accessibilityLabel(title)
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Text(title).font(.callout).fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 12)
+                TextField("", value: Binding(get: { value }, set: { if $0.isFinite { value = min(range.upperBound,max(range.lowerBound,$0)) } }), format: .number.precision(.fractionLength(2)))
+                    .frame(width: 68).textFieldStyle(.roundedBorder).accessibilityLabel(title)
                 Text(unit).font(.caption).foregroundStyle(.secondary).frame(width: 24, alignment: .leading)
             }
-        }
+            Slider(value: $value, in: range).labelsHidden().accessibilityLabel(title)
+        }.padding(.vertical, 4).frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
 struct SensitivityControls: View {
     @Binding var value: Sensitivity
     var body: some View {
         Section("Continuous movement") {
-            NumericSlider(title:"Horizontal distance per action",value:$value.horizontalMM,range:0.5...20,unit:"mm")
-            NumericSlider(title:"Vertical distance per action",value:$value.verticalMM,range:0.5...20,unit:"mm")
-            NumericSlider(title:"Volume per movement interval",value:$value.volumePercent,range:0.1...20,unit:"%")
+            NumericSlider(title:"Horizontal interval",value:$value.horizontalMM,range:0.5...20,unit:"mm")
+            NumericSlider(title:"Vertical interval",value:$value.verticalMM,range:0.5...20,unit:"mm")
+            NumericSlider(title:"Volume step",value:$value.volumePercent,range:0.1...20,unit:"%")
         }
         Section("Recognition") {
-            NumericSlider(title:"Tap maximum duration",value:$value.tapDuration,range:0.05...1,unit:"s")
-            NumericSlider(title:"Tap movement tolerance",value:$value.tapToleranceMM,range:0.1...5,unit:"mm")
-            NumericSlider(title:"Swipe activation distance",value:$value.activationMM,range:0.1...10,unit:"mm")
-            NumericSlider(title:"Axis dominance (higher rejects more diagonals)",value:$value.diagonalRatio,range:1.05...4,unit:"×")
-            NumericSlider(title:"Jitter deadband",value:$value.jitterMM,range:0...0.5,unit:"mm")
+            NumericSlider(title:"Tap duration",value:$value.tapDuration,range:0.05...1,unit:"s")
+            NumericSlider(title:"Tap tolerance",value:$value.tapToleranceMM,range:0.1...5,unit:"mm")
+            NumericSlider(title:"Swipe activation",value:$value.activationMM,range:0.1...10,unit:"mm")
+            NumericSlider(title:"Diagonal rejection",value:$value.diagonalRatio,range:1.05...4,unit:"×")
+            NumericSlider(title:"Jitter tolerance",value:$value.jitterMM,range:0...0.5,unit:"mm")
         }
-        Text("Changes take effect immediately. Lift fingers after editing. Continuous gestures retain fractional distance within a direction; reversing starts from the turning point.").font(.caption).foregroundStyle(.secondary)
     }
 }
 struct ApplicationsView: View {
@@ -309,7 +375,7 @@ struct CalibrationView: View {
     var body: some View {
         Form {
             Section("Selected device") {
-                Picker("Trackpad", selection: $model.config.selectedDevice) { Text("Select trackpad").tag(""); ForEach(model.devices) { Text($0.name).tag($0.id) } }
+                Picker("Trackpad", selection: Binding(get: { model.config.selectedDevice.isEmpty ? model.activeDevice : model.config.selectedDevice }, set: { model.config.selectedDevice = $0 })) { Text("Select trackpad").tag(""); ForEach(model.devices) { Text($0.name).tag($0.id) } }
                 if let device = model.devices.first(where: { $0.id == model.activeDevice }) {
                     LabeledContent("Sensor surface (raw units)",value:"\(device.rawWidth) × \(device.rawHeight)")
                 }
@@ -324,12 +390,12 @@ struct CalibrationView: View {
                 Text("Use a ruler to mark a known travel distance on the trackpad. Begin a trial, place ONE finger, move straight along the chosen axis by that distance, then lift. Custom actions pause during measurement.")
                 HStack {
                     TextField("Measured travel (mm)",value:$distance,format:.number).frame(width:180)
-                    Button("Measure X") { model.startCalibration("X") }.disabled(model.activeDevice.isEmpty)
-                    Button("Measure Y") { model.startCalibration("Y") }.disabled(model.activeDevice.isEmpty)
+                    Button("Measure X") { model.startCalibration("X") }.disabled(model.activeDevice.isEmpty || (!model.config.selectedDevice.isEmpty && model.config.selectedDevice != model.activeDevice))
+                    Button("Measure Y") { model.startCalibration("Y") }.disabled(model.activeDevice.isEmpty || (!model.config.selectedDevice.isEmpty && model.config.selectedDevice != model.activeDevice))
                 }
                 if let axis = model.calibrationAxis {
                     LabeledContent("Measuring \(axis)",value:"\(model.calibrationTravel.formatted(.number.precision(.fractionLength(4)))) normalized")
-                    HStack { Button("Apply Measurement") { model.finishCalibration(distance:distance) }; Button("Cancel") { model.cancelCalibration() } }
+                    HStack { Button("Use Measurement") { model.finishCalibration(distance:distance) }; Button("Cancel") { model.cancelCalibration() } }
                 }
             }
             Section("Physical coordinate scale") {
@@ -337,7 +403,7 @@ struct CalibrationView: View {
                 HStack { Text("Active height (mm)"); Spacer(); TextField("Height",value:calibration.heightMM,format:.number).frame(width:90) }
                 Toggle("I measured and verified both axes",isOn:calibration.confirmed).disabled(!((20...300).contains(calibration.wrappedValue.widthMM) && (20...300).contains(calibration.wrappedValue.heightMM)))
                 Label(calibration.wrappedValue.valid ? "Calibrated — distance gestures available" : "Not calibrated — custom mappings paused",systemImage:calibration.wrappedValue.valid ? "checkmark.circle" : "ruler").foregroundStyle(calibration.wrappedValue.valid ? .green : .orange)
-            }.disabled(model.activeDevice.isEmpty)
+            }.disabled(model.activeDevice.isEmpty || (!model.config.selectedDevice.isEmpty && model.config.selectedDevice != model.activeDevice))
         }.formStyle(.grouped)
     }
 }
@@ -408,9 +474,9 @@ struct GeneralView: View {
             Section("Configuration") {
                 Text(model.store.url.path).font(.system(.caption,design:.monospaced)).textSelection(.enabled)
                 HStack { Button("Export Settings…") { model.exportSettings() }; Button("Import Settings…") { model.importSettings() } }
-                HStack { Button("Open Configuration File") { model.save(); NSWorkspace.shared.open(model.store.url) }; Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([model.store.url]) } }
+                HStack { Button("Open Configuration File") { if FileManager.default.fileExists(atPath: model.store.url.path) { NSWorkspace.shared.open(model.store.url) } else { model.message = "Click Save to create the configuration file first." } }; Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([model.store.url]) } }
                 Button("Restore Defaults…",role:.destructive) { resetAlert = true }
-                Text("Settings save automatically and external JSON edits reload within two seconds. Imports back up the current file and reset local setup confirmations/calibration.").font(.caption).foregroundStyle(.secondary)
+                Text("Changes, imports, and restored defaults remain pending until Save. Reset discards pending edits.").font(.caption).foregroundStyle(.secondary)
             }
             Section("System Shortcuts") {
                 Text("Explicit macOS keyboard settings take precedence. If a setting is absent, enter the shortcut you verified in System Settings and enable its fallback. The app never assumes Control–Left/Right is configured.").font(.caption).foregroundStyle(.secondary)
@@ -434,7 +500,7 @@ struct GeneralView: View {
             }
         }.formStyle(.grouped).alert("Restore all default settings?",isPresented:$resetAlert) {
             Button("Cancel",role:.cancel) {}; Button("Restore",role:.destructive) { model.restoreDefaults() }
-        } message: { Text("Your current configuration will be backed up. Calibration and setup confirmations will need to be completed again.") }
+        } message: { Text("Defaults will be staged for review. Click Save to apply them, or Reset to keep your saved settings.") }
     }
     private func fallback(_ kind: ActionKind) -> Shortcut {
         switch kind {
@@ -462,7 +528,7 @@ struct DiagnosticsView: View {
                 LabeledContent("Last action / result",value:model.lastAction)
                 LabeledContent("Last action timestamp",value:model.lastActionDate?.formatted(date:.omitted,time:.standard) ?? "None")
                 LabeledContent("Foreground app",value:model.foreground)
-                LabeledContent("Sensitivity",value:"X \(model.config.sensitivity(for:model.foreground).horizontalMM) mm • Y \(model.config.sensitivity(for:model.foreground).verticalMM) mm")
+                LabeledContent("Sensitivity",value:"X \(model.savedConfig.sensitivity(for:model.foreground).horizontalMM) mm • Y \(model.savedConfig.sensitivity(for:model.foreground).verticalMM) mm")
                 LabeledContent("Device",value:model.engineStatus)
             }
             Section("Diagnostics log") {

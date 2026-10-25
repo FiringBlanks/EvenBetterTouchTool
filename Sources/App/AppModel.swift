@@ -7,16 +7,14 @@ struct InstalledApplication: Identifiable {
     var id: String; var name: String; var url: URL
 }
 final class AppModel: ObservableObject {
-    static let version = "2.0.0"
-    @Published var config: Configuration {
-        didSet {
-            guard !loading else { return }
-            dirty = true
-            apply(); pendingSave?.cancel()
-            let item = DispatchWorkItem { [weak self] in self?.save() }; pendingSave = item
-            DispatchQueue.main.asyncAfter(deadline: .now()+0.2, execute: item)
-        }
-    }
+    static let version = "2.1.0"
+    @Published var editing: SettingsDraft
+    var config: Configuration { get { editing.config } set { editing.config = newValue } }
+    var savedConfig: Configuration { editing.saved }
+    var loginEnabled: Bool { get { editing.loginEnabled } set { editing.loginEnabled = newValue } }
+    var hasPendingChanges: Bool { editing.hasChanges }
+    var canSave: Bool { !editing.externalConflict && (hasPendingChanges || runtimePaused || !FileManager.default.fileExists(atPath: store.url.path) || !configurationIssue.isEmpty) }
+    @Published var runtimePaused = false
     @Published var section = "Dashboard"
     @Published var selectedProfile = ""
     @Published var snapshot = EngineSnapshot()
@@ -34,15 +32,11 @@ final class AppModel: ObservableObject {
     @Published var configurationIssue = ""
     @Published var log: [String] = []
     @Published var installed: [InstalledApplication] = []
-    @Published var loginEnabled = false
     @Published var calibrationAxis: String?
     @Published var calibrationTravel = 0.0
     @Published var calibrationOffAxis = 0.0
     @Published var legacyPIDs: [Int32] = []
     private var calibrationTrial: CalibrationTrial?
-    private var loading = false
-    private var dirty = false
-    private var pendingSave: DispatchWorkItem?
     private var observedData: Data?
     private var permissionTimer: Timer?
     private var workspaceToken: NSObjectProtocol?
@@ -51,8 +45,13 @@ final class AppModel: ObservableObject {
     let executor = ActionExecutor()
     init(configurationURL: URL? = nil) {
         store = configurationURL.map(ConfigurationStore.init(url:)) ?? ConfigurationStore()
-        do { config = try store.load() }
-        catch { config = .defaults; config.enabled = false; configurationIssue = error.localizedDescription; message = "Configuration was preserved but could not load: \(error.localizedDescription). Repair it or restore defaults to resume." }
+        let loaded: Configuration
+        var loadIssue = ""
+        do { loaded = try store.load(persistMigration: false) }
+        catch { var fallback = Configuration.defaults; fallback.enabled = false; loaded = fallback; loadIssue = error.localizedDescription }
+        let login = SMAppService.mainApp.status == .enabled || SMAppService.mainApp.status == .requiresApproval
+        editing = SettingsDraft(saved: loaded, loginEnabled: login)
+        if !loadIssue.isEmpty { configurationIssue = loadIssue; message = "Configuration could not load. Repair it or restore defaults and Save." }
         observedData = try? Data(contentsOf: store.url)
         executor.report = { [weak self] s in self?.record(s) }
         driver.onStatus = { [weak self] s in self?.engineStatus = s }
@@ -60,7 +59,6 @@ final class AppModel: ObservableObject {
         driver.onDevices = { [weak self] list, selected in
             guard let self else { return }; self.devices = list; self.activeDevice = selected
             if selected.isEmpty { self.snapshot = EngineSnapshot() }
-            if self.config.selectedDevice.isEmpty, !selected.isEmpty { self.config.selectedDevice = selected }
         }
         driver.onFrame = { [weak self] snapshot in
             guard let self else { return }; self.snapshot = snapshot
@@ -71,10 +69,10 @@ final class AppModel: ObservableObject {
             }
         }
         driver.onTrigger = { [weak self] trigger, app, generation in
-            guard let self, self.config.enabled, self.legacyPIDs.isEmpty, self.calibrationAxis == nil, generation == self.driver.currentGeneration,
+            guard let self, self.savedConfig.enabled, !self.runtimePaused, self.legacyPIDs.isEmpty, self.calibrationAxis == nil, generation == self.driver.currentGeneration,
                   self.accessibility, self.inputMonitoring, NSWorkspace.shared.frontmostApplication?.bundleIdentifier == app,
-                  self.configurationIssue.isEmpty, self.config.blockedReason(trigger.gesture, mapping: trigger.mapping, device: self.activeDevice) == nil else { return }
-            self.executor.execute(trigger, app: app, config: self.config)
+                  self.configurationIssue.isEmpty, self.savedConfig.blockedReason(trigger.gesture, mapping: trigger.mapping, device: self.activeDevice) == nil else { return }
+            self.executor.execute(trigger, app: app, config: self.savedConfig)
         }
     }
     func start() {
@@ -83,7 +81,7 @@ final class AppModel: ObservableObject {
         workspaceToken = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in self?.foregroundChanged() }
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.checkPermissions(); self?.reloadExternalChanges() }
     }
-    func stop() { save(); driver.end(); permissionTimer?.invalidate(); if let workspaceToken { NSWorkspace.shared.notificationCenter.removeObserver(workspaceToken) } }
+    func stop() { driver.end(); permissionTimer?.invalidate(); if let workspaceToken { NSWorkspace.shared.notificationCenter.removeObserver(workspaceToken) } }
     func foregroundChanged() {
         foreground = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         foregroundName = NSWorkspace.shared.frontmostApplication?.localizedName ?? "Unknown"
@@ -91,35 +89,61 @@ final class AppModel: ObservableObject {
     }
     func apply() {
         executor.cancel()
-        var effective = config
-        if !legacyPIDs.isEmpty || calibrationAxis != nil || !configurationIssue.isEmpty { effective.enabled = false }
+        var effective = savedConfig
+        if runtimePaused || !legacyPIDs.isEmpty || calibrationAxis != nil || !configurationIssue.isEmpty { effective.enabled = false }
         driver.configure(effective, app: foreground)
-        NSApp.setActivationPolicy(config.menuBarOnly ? .accessory : .regular)
+        if let app = NSApp { app.setActivationPolicy(savedConfig.menuBarOnly ? .accessory : .regular) }
     }
-    func save() {
-        pendingSave = nil
-        guard dirty else { return }
+    @discardableResult func save() -> Bool {
         do {
-            // Preserve malformed files too, before the first intentional GUI edit.
-            if let data = try? Data(contentsOf: store.url), (try? JSONDecoder().decode(Configuration.self, from: data)) == nil {
-                try data.write(to: store.url.deletingLastPathComponent().appendingPathComponent("threefinger.unreadable-\(UUID().uuidString).json"), options: .atomic)
+            guard !editing.externalConflict else { throw ConfigError.invalid("Settings changed outside the app. Reset to review them before saving.") }
+            var candidate = config
+            if candidate.selectedDevice.isEmpty { candidate.selectedDevice = activeDevice }
+            try persist(candidate, includeLogin: true)
+            editing.acceptAll(candidate, loginEnabled: editing.loginEnabled)
+            configurationIssue = ""; runtimePaused = false; apply(); checkPermissions()
+            return true
+        } catch { message = "Settings were not saved: \(error.localizedDescription)"; return false }
+    }
+    func resetEdits() { editing.reset(); cancelCalibration(); message = "" }
+    @discardableResult func saveMapping(_ mapping: Mapping?, gesture: Gesture, profileID: String) -> Bool {
+        do {
+            let candidate = try editing.savingGesture(gesture, override: mapping, profileID: profileID)
+            try persist(candidate, includeLogin: false)
+            editing.acceptGesture(candidate, gesture: gesture, override: mapping, profileID: profileID)
+            configurationIssue = ""; apply()
+            return true
+        } catch { message = "Gesture was not saved: \(error.localizedDescription)"; return false }
+    }
+    private func persist(_ candidate: Configuration, includeLogin: Bool) throws {
+        _ = try candidate.validated()
+        let currentData = try? Data(contentsOf: store.url)
+        guard currentData == observedData else { throw ConfigError.invalid("The configuration file changed outside the app. Wait for it to reload, then Reset to review the changes.") }
+        let changeLogin = includeLogin && editing.loginEnabled != editing.savedLoginEnabled
+        let originalLogin = editing.savedLoginEnabled
+        do {
+            if changeLogin { try setLoginService(editing.loginEnabled) }
+            if let currentData {
+                try currentData.write(to: store.url.deletingLastPathComponent().appendingPathComponent("threefinger.pre-save-\(UUID().uuidString).json"), options: .atomic)
             }
-            let wasPaused = !configurationIssue.isEmpty
-            try store.save(config); observedData = try? Data(contentsOf: store.url); dirty = false; configurationIssue = ""
-            if wasPaused { apply() }
-        } catch { configurationIssue = error.localizedDescription; message = "Settings could not be saved: \(error.localizedDescription)"; apply() }
+            try store.save(candidate); observedData = try Data(contentsOf: store.url)
+        } catch {
+            if changeLogin { try? setLoginService(originalLogin) }
+            throw error
+        }
     }
     private func reloadExternalChanges() {
-        guard pendingSave?.isCancelled != false, let data = try? Data(contentsOf: store.url), data != observedData else { return }
+        guard let data = try? Data(contentsOf: store.url), data != observedData else { return }
         do {
             let updated = try JSONDecoder().decode(Configuration.self, from: data).validated()
-            loading = true; config = updated; loading = false; observedData = data; configurationIssue = ""; apply()
-        } catch { configurationIssue = error.localizedDescription; message = "External configuration change rejected; actions paused: \(error.localizedDescription)"; observedData = data; apply() }
+            editing.receiveExternal(updated); observedData = data; configurationIssue = ""; apply()
+            if editing.externalConflict { message = "Settings changed outside the app. Reset to review the saved settings before continuing." }
+        } catch { configurationIssue = error.localizedDescription; message = "Invalid external configuration; actions paused."; observedData = data; apply() }
     }
     func checkPermissions() {
         let ax = AXIsProcessTrusted(), input = CGPreflightListenEventAccess()
         if accessibility != ax || inputMonitoring != input { accessibility = ax; inputMonitoring = input; driver.cancel(); executor.cancel() }
-        loginEnabled = SMAppService.mainApp.status == .enabled || SMAppService.mainApp.status == .requiresApproval
+        editing.observeLogin(SMAppService.mainApp.status == .enabled || SMAppService.mainApp.status == .requiresApproval)
     }
     func requestPermissions() {
         _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue():true] as CFDictionary)
@@ -127,29 +151,24 @@ final class AppModel: ObservableObject {
     }
     func openSettings(_ pane: String) { if let url = URL(string: pane) { NSWorkspace.shared.open(url) } }
     func openLoginItems() { SMAppService.openSystemSettingsLoginItems() }
-    func setLogin(_ enabled: Bool) {
-        do { if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }; checkPermissions(); if SMAppService.mainApp.status == .requiresApproval { message = "Approve EvenBetterTouchTool in System Settings → General → Login Items to finish enabling login startup." } }
-        catch { message = "Login setting: \(error.localizedDescription). Install the app in Applications first." }
+    func setLogin(_ enabled: Bool) { loginEnabled = enabled }
+    private func setLoginService(_ enabled: Bool) throws {
+        if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+        if SMAppService.mainApp.status == .requiresApproval { message = "Approve EvenBetterTouchTool in macOS Login Items to finish enabling startup." }
     }
-    func emergencyDisable() { config.enabled = false; driver.cancel(); executor.cancel(); record("Emergency global disable") }
+    func emergencyDisable() { runtimePaused = true; config.enabled = false; driver.cancel(); executor.cancel(); apply(); record("Emergency pause — settings unchanged on disk") }
+    func toggleFromMenu() {
+        if runtimePaused { runtimePaused = false; config.enabled = savedConfig.enabled; apply() }
+        else if savedConfig.enabled { emergencyDisable() }
+        else { config.enabled = true; message = "Click Save in Settings to enable gestures." }
+    }
     func record(_ text: String) {
         lastAction = text; lastActionDate = Date()
-        if config.logging { log.append("\(Date().formatted(date: .omitted, time: .standard))  \(text)"); if log.count > 250 { log.removeFirst(log.count-250) } }
+        if savedConfig.logging { log.append("\(Date().formatted(date: .omitted, time: .standard))  \(text)"); if log.count > 250 { log.removeFirst(log.count-250) } }
     }
-    func mapping(_ gesture: Gesture) -> Mapping {
-        if selectedProfile.isEmpty { return config.mappings[gesture.id] ?? Mapping(enabled: false) }
-        return config.profiles.first { $0.bundleID == selectedProfile }?.mappings[gesture.id] ?? config.mappings[gesture.id] ?? Mapping(enabled: false)
-    }
-    func setMapping(_ mapping: Mapping, gesture: Gesture) {
-        if selectedProfile.isEmpty { config.mappings[gesture.id] = mapping }
-        else if let i = config.profiles.firstIndex(where: { $0.bundleID == selectedProfile }) { config.profiles[i].mappings[gesture.id] = mapping }
-    }
-    func restoreMapping(_ g: Gesture) {
-        if selectedProfile.isEmpty { config.mappings[g.id] = Configuration.defaults.mappings[g.id] }
-        else if let i = config.profiles.firstIndex(where: { $0.bundleID == selectedProfile }) {
-            config.profiles[i].mappings[g.id] = Configuration.defaultProfile(selectedProfile, name: config.profiles[i].name).mappings[g.id]
-        }
-    }
+    func mapping(_ gesture: Gesture) -> Mapping { editing.mapping(gesture, profileID: selectedProfile) }
+    func rowEnabled(_ fingers: Int) -> Bool { editing.rowEnabled(fingers, profileID: selectedProfile) }
+    func toggleRow(_ fingers: Int) { editing.toggleRow(fingers, profileID: selectedProfile) }
     func addProfile(id: String, name: String) {
         guard !config.profiles.contains(where: { $0.bundleID == id }) else { selectedProfile = id; return }
         config.profiles.append(AppProfile(bundleID: id, name: name)); selectedProfile = id
@@ -173,23 +192,24 @@ final class AppModel: ObservableObject {
         }
     }
     func exportSettings() {
-        save(); let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "EvenBetterTouchTool-profile.json"
-        panel.begin { [weak self] result in guard result == .OK, let url = panel.url, let self else { return }; do { try Data(contentsOf: self.store.url).write(to: url, options: .atomic) } catch { self.message = error.localizedDescription } }
+        let exported = savedConfig
+        let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "EvenBetterTouchTool-profile.json"
+        panel.begin { [weak self] result in guard result == .OK, let url = panel.url, let self else { return }; do { let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; try encoder.encode(exported).write(to: url, options: .atomic) } catch { self.message = error.localizedDescription } }
     }
     func importSettings() {
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.json]
         panel.begin { [weak self] result in
             guard result == .OK, let url = panel.url, let self else { return }
-            do {
-                var imported = try self.store.importFile(url)
-                // Consent and dimensions are local hardware state, never trusted from imports.
-                imported.safety = Safety(); imported.calibrations = [:]; imported.selectedDevice = self.activeDevice
-                self.config = imported; self.save()
-            } catch { self.message = error.localizedDescription }
+            do { try self.stageImport(from: url) }
+            catch { self.message = error.localizedDescription }
         }
     }
+    func stageImport(from url: URL) throws {
+        var imported = try store.readImport(url)
+        imported.selectedDevice = activeDevice
+        config = imported; message = "Imported settings are pending. Click Save to apply them."
+    }
     func restoreDefaults() {
-        if let data = try? Data(contentsOf: store.url) { try? data.write(to: store.url.deletingLastPathComponent().appendingPathComponent("threefinger.pre-reset-\(UUID().uuidString).json"), options: .atomic) }
         config = .defaults; config.selectedDevice = activeDevice
     }
     func startCalibration(_ axis: String) { calibrationTrial = CalibrationTrial(horizontal: axis == "X"); calibrationTravel = 0; calibrationOffAxis = 0; calibrationAxis = axis; apply() }
@@ -208,7 +228,7 @@ final class AppModel: ObservableObject {
         """
         EvenBetterTouchTool \(Self.version) • \(ProcessInfo.processInfo.operatingSystemVersionString)
         Configuration issue: \(configurationIssue)
-        Engine: \(engineStatus) • Enabled: \(config.enabled)
+        Engine: \(engineStatus) • Enabled: \(savedConfig.enabled && !runtimePaused)
         Device: \(activeDevice) • Devices: \(devices.count)
         Accessibility: \(accessibility) • Input Monitoring: \(inputMonitoring) • Button observation: \(buttonObserver)
         App: \(foregroundName) (\(foreground))
@@ -216,8 +236,8 @@ final class AppModel: ObservableObject {
         Contacts: \(snapshot.contacts)
         Gesture: \(snapshot.gesture) • Reason: \(snapshot.reason)
         Action: \(lastAction) • Last action: \(lastActionDate?.description ?? "None")
-        Sensitivity: \(config.sensitivity(for: foreground))
-        Calibration: \(String(describing: config.calibrations[activeDevice]))
+        Sensitivity: \(savedConfig.sensitivity(for: foreground))
+        Calibration: \(String(describing: savedConfig.calibrations[activeDevice]))
         Legacy daemons: \(legacyPIDs)
         """
     }
@@ -232,6 +252,6 @@ final class AppModel: ObservableObject {
             }
             if !legacyPIDs.isEmpty { message = "Original threefinger daemon is running. Run the local install.sh to migrate safely; custom actions are paused." }
             apply()
-        } catch { message = "Could not check for the legacy daemon; run install.sh before enabling gestures"; config.enabled = false }
+        } catch { message = "Could not check for the legacy daemon; run install.sh before enabling gestures"; runtimePaused = true; apply() }
     }
 }

@@ -25,8 +25,13 @@ build/CoreTests: $(CORE) Tests/CoreTests.swift
 	mkdir -p build/module-cache
 	$(SWIFTC) $(SWIFTFLAGS) $(CORE) Tests/CoreTests.swift -o $@
 
-test: build/CoreTests
+build/AppModelTests: $(CORE) Sources/App/AppModel.swift Sources/App/ActionExecutor.swift Sources/App/TrackpadDriver.swift Tests/AppModelTests.swift mt.h
+	mkdir -p build/module-cache
+	$(SWIFTC) $(SWIFTFLAGS) -import-objc-header mt.h $(CORE) Sources/App/AppModel.swift Sources/App/ActionExecutor.swift Sources/App/TrackpadDriver.swift Tests/AppModelTests.swift -o $@
+
+test: build/CoreTests build/AppModelTests
 	./build/CoreTests
+	./build/AppModelTests
 
 check: all test
 	$(APP)/Contents/MacOS/EvenBetterTouchTool --smoke-test
