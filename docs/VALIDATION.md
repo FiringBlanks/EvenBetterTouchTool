@@ -19,7 +19,7 @@ Build host: Apple Silicon, macOS 26.6.2, Swift 6.3.2, Command Line Tools. Target
 `make check` completed successfully:
 
 - Native application compilation: PASS, no compiler warnings.
-- Deterministic automated core suite: **141 core + 25 app-model + 14 shortcut lifecycle tests passed, 0 failed (180 total)**.
+- Deterministic automated core suite: **143 core + 25 app-model + 14 shortcut lifecycle tests passed, 0 failed (182 total)**.
 - `--smoke-test`: PASS (default schema validation and AppKit-linked executable startup).
 - `codesign --verify --strict`: PASS.
 - App `Info.plist` validation: PASS.

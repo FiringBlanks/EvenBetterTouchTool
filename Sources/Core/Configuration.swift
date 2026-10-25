@@ -171,6 +171,17 @@ struct Configuration: Codable, Equatable {
     }
     func sensitivity(for app: String) -> Sensitivity { profile(app)?.sensitivity ?? sensitivity }
     func movementScale(for device: String) -> MovementScale { MovementScale(calibrations[device]) }
+    func scrollInterceptedGestures(app: String, device: String) -> Set<Gesture> {
+        Set(Gesture.all.filter { physical in
+            guard physical.direction.isSwipe else { return false }
+            var target = physical, mapping = self.mapping(physical,app:app)
+            if mapping.reverse {
+                switch physical.direction { case .up: target.direction = .down; case .down: target.direction = .up; case .left: target.direction = .right; case .right: target.direction = .left; default: break }
+                mapping.action = self.mapping(target,app:app).action
+            }
+            return blockedReason(target,mapping:mapping,device:device) == nil
+        })
+    }
     func blockedReason(_ g: Gesture, mapping: Mapping, device: String) -> String? {
         if !enabled { return "Engine disabled" }
         if !mapping.enabled || mapping.action.kind == .none { return "No action" }

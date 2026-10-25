@@ -87,9 +87,7 @@ final class TrackpadDriver {
     }
     private func updateScrollEligibility() {
         let c = engine.config
-        let custom = permitted ? Set(Gesture.all.filter {
-            $0.direction.isSwipe && c.blockedReason($0,mapping:c.mapping($0,app:engine.app),device:engine.device) == nil
-        }) : []
+        let custom = permitted ? c.scrollInterceptedGestures(app:engine.app,device:engine.device) : []
         scrollFilter.configure(custom:custom)
     }
     func end() {
