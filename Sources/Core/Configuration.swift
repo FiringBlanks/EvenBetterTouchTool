@@ -152,7 +152,7 @@ struct Configuration: Codable, Equatable {
             case (3, .up): m.action.kind = .missionControl
             case (3, .down): m.action.kind = .appExpose
             case (3, .tap): m.action.kind = .playPause; m.enabled = false
-            case (3, .click): m.action.kind = .playPause; m.enabled = false
+            case (3, .click): m.action.kind = .playPause
             case (4, .left), (4, .right): m.action.kind = .native
             case (4, .up): m.action.kind = .volumeUp; m.continuous = true
             case (4, .down): m.action.kind = .volumeDown; m.continuous = true
@@ -169,7 +169,7 @@ struct Configuration: Codable, Equatable {
         var p = AppProfile(bundleID: id, name: name)
         if ["com.google.Chrome", "com.apple.finder"].contains(id) {
             for d in [Direction.left, .right] {
-                p.mappings[Gesture(fingers: 3, direction: d).id] = Mapping(action: Action(kind: d == .left ? .previousTab : .nextTab), continuous: true)
+                p.mappings[Gesture(fingers: 3, direction: d).id] = Mapping(action: Action(kind: d == .left ? .previousTab : .nextTab), continuous: true, cooldown: id == "com.google.Chrome" ? 0.05 : 0)
             }
         }
         return p

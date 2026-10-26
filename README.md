@@ -2,11 +2,11 @@
 
 A free, MIT-licensed native SwiftUI menu bar app built from [firedev/threefinger](https://github.com/firedev/threefinger). Customize three- and four-finger gestures with app profiles, continuous relative or calibrated movement, media controls, Core Audio volume, and a graphical setup/diagnostics interface. No subscriptions, dependencies, analytics, or network updater.
 
-**Requires macOS 14+, Apple Silicon, and Xcode Command Line Tools to build.** The raw contact driver uses Apple's private MultitouchSupport framework; future OS compatibility is not guaranteed. Physical press actions are opt-in and retain the normal mouse click. See [compatibility and API investigation](docs/COMPATIBILITY.md) before enabling custom input.
+**Requires macOS 14+, Apple Silicon, and Xcode Command Line Tools to build.** The raw contact driver uses Apple's private MultitouchSupport framework; future OS compatibility is not guaranteed. Three-finger click Play/Pause is enabled by default and retains the normal mouse click. See [compatibility and API investigation](docs/COMPATIBILITY.md) before enabling custom input.
 
 ## Download and change settings
 
-Download the [Apple Silicon release ZIP](https://github.com/FiringBlanks/EvenBetterTouchTool/releases/download/v2.4.0/EvenBetterTouchTool-2.4.0-arm64.zip) from [GitHub Releases](https://github.com/FiringBlanks/EvenBetterTouchTool/releases). Extract it and run `Install.command` (or `./install.sh` in Terminal). The installer places the app in your personal Applications folder, creates a launch shortcut in the main Applications folder (or on the desktop if that folder is unavailable), and safely stops the original threefinger service if present. The app is also included directly in the ZIP.
+Download the [Apple Silicon release ZIP](https://github.com/FiringBlanks/EvenBetterTouchTool/releases/download/v2.4.1/EvenBetterTouchTool-2.4.1-arm64.zip) from [GitHub Releases](https://github.com/FiringBlanks/EvenBetterTouchTool/releases). Extract it and run `Install.command` (or `./install.sh` in Terminal). The installer places the app in your personal Applications folder, creates a launch shortcut in the main Applications folder (or on the desktop if that folder is unavailable), and safely stops the original threefinger service if present. The app is also included directly in the ZIP.
 
 After installation, open **Finder → Applications → EvenBetterTouchTool** (or the desktop shortcut). Drag that icon into the Dock if you want one-click access. The shortcut opens the installed app.
 
@@ -46,10 +46,10 @@ If no gestures work or a permission list says “No Items”, follow the [step-b
 
 | Gesture | Default action |
 | --- | --- |
-| Three-finger left/right | Previous/next tab in Chrome and Finder profiles only; 1% of trackpad width per step (1 mm when calibrated) |
+| Three-finger left/right | Previous/next tab in Chrome and Finder profiles only; 1% of trackpad width per step (1 mm when calibrated). Chrome starts with a 0.05 s cooldown; Finder starts without a cooldown. |
 | Three-finger up/down | Mission Control / App Exposé, once per contact session |
 | Three-finger tap | Disabled; Play/Pause remains available to assign |
-| Three-finger physical click | Play/Pause available as an opt-in press action; disabled until enabled |
+| Three-finger physical click | Play/Pause enabled; the normal mouse click is retained |
 | Four-finger left/right | Native desktop gesture; sends no synthetic event |
 | Four-finger up/down | Volume up/down, 2 percentage points per 4% of trackpad height (4 mm when calibrated) |
 | Four-finger tap | Mute/unmute |
@@ -155,3 +155,7 @@ An active Quartz filter correlates continuous scroll events with fresh contacts 
 Fresh tap defaults allow 0.50 seconds of contact, 0.15 seconds for fingers to land, 0.20 seconds for them to lift, and movement up to 2 mm (or 2% in relative mode). A 1.5-unit coherent swipe cancels the tap; any swipe that actually triggers an action, and any physical press, also cancels it. Tap cooldown defaults to 0.25 seconds. These thresholds are independently adjustable, so increasing movement tolerance does not require changing continuous swipe intervals.
 
 Sensitivity exposes all tap and physical press controls globally and in application sensitivity overrides. Each Tap/Click cell also offers its own override. Tap controls include duration, finger drift, swipe cancellation, landing/lift windows, cooldown, waiting for a physical click, and click exclusion. Press controls include mouse button, contact freshness, resting time, late-contact grace, maximum press duration, movement tolerance, cooldown, and ignoring synthesized presses. Every edit requires Save; Reset discards it. Stored pre-2.4 duration and movement values still load, and missing new option blocks use defaults. Physical press actions fire on mouse-button release, never just from touching the trackpad.
+
+### Version 2.4.1 defaults
+
+Fresh configurations and restored Chrome profiles use a 0.05-second cooldown for three-finger left/right swipes. Movement during cooldown is discarded, so the distance-per-action guarantee does not apply to the discarded movement. Three-finger Click → Play/Pause is enabled by default; three-finger Tap playback stays disabled. Existing saved mappings and cooldowns remain unchanged unless you explicitly restore defaults and Save. The current user confirmed three-finger click playback works on their Mac; other physical acceptance tests remain separate.

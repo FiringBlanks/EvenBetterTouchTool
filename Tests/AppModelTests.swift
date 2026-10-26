@@ -198,6 +198,13 @@ import CoreGraphics
             try expect(model.savedConfig.mappings[g.id]?.enabled==true && model.savedConfig.sensitivity.effectiveTapOptions.duration==0.5 && model.hasPendingChanges)
             model.resetEdits(); try expect(!model.hasPendingChanges && model.config.sensitivity.effectiveTapOptions.duration==0.5)
         }
+        test("Restore Defaults stages enabled press playback without saving it") { model, url in
+            model.config.mappings["3_click"]?.enabled=false; try expect(model.save())
+            let before=try Data(contentsOf:url); model.restoreDefaults()
+            try expect(model.config.mappings["3_click"]?.enabled==true && model.config.mappings["3_tap"]?.enabled==false && model.savedConfig.mappings["3_click"]?.enabled==false)
+            try expect(try Data(contentsOf:url)==before)
+            model.resetEdits(); try expect(model.config.mappings["3_click"]?.enabled==false)
+        }
         print("\n\(passed) model tests passed; \(failed) failed")
         if failed > 0 { exit(1) }
     }
