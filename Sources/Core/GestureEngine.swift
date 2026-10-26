@@ -35,18 +35,22 @@ final class GestureEngine {
     private var remainder = 0.0, lastSign = 0.0
     private var maxMovement = 0.0
     private var lastFire = -Double.infinity
+    private var lastTap: [Int:Double] = [:]
     var trackedFingerCount: Int { cancelled ? 0 : start.count }
     init(config: Configuration, app: String, device: String) { self.config = config; self.app = app; self.device = device }
     func cancel(_ reason: String = "Cancelled; lift all fingers") { cancelled = true; remainder = 0; snapshot.reason = reason }
-    func reset() {
+    func reset(preserveTapCooldown: Bool = false) {
         start = []; releasingAt = nil; cancelled = false; clicked = false; swiped = false; singleFired = false
         axis = nil; remainder = 0; lastSign = 0; maxMovement = 0; lastFire = -.infinity; lastTime = -.infinity
+        if !preserveTapCooldown { lastTap = [:] }
     }
     func physicalClick() { clicked = true; cancel("Physical button observed; tap cancelled") }
+    func observedPress(_ fingers: Int) { snapshot.gesture = Gesture(fingers:fingers,direction:.click).title; snapshot.reason = "Physical press action; normal mouse click retained" }
     func process(_ frame: TouchFrame) -> [GestureTrigger] {
         snapshot.fingers = frame.contacts.count; snapshot.contacts = frame.contacts
         guard frame.time.isFinite && frame.time > lastTime else { return [] }
-        if frame.time - lastTime > 0.35 && !start.isEmpty { cancel("Contact stream interrupted") }
+        let tap = config.tapOptions(fingers:start.isEmpty ? frame.contacts.count : start.count,app:app)
+        if frame.time - lastTime > (swiped ? 0.35 : max(0.35,tap.duration)) && !start.isEmpty { cancel("Contact stream interrupted") }
         lastTime = frame.time
         if frame.physicalButton { physicalClick() }
         let c = frame.contacts
@@ -54,17 +58,19 @@ final class GestureEngine {
         let sensitivity = config.sensitivity(for: app)
         let scale = config.movementScale(for: device)
         if c.isEmpty {
-            defer { reset() }
-            guard !start.isEmpty, !cancelled, !clicked, !swiped, frame.time - startTime <= sensitivity.tapDuration,
-                  maxMovement <= sensitivity.tapToleranceMM, releasingAt == nil || frame.time - releasingAt! <= 0.08 else { return [] }
+            defer { reset(preserveTapCooldown:true) }
+            guard !start.isEmpty, !cancelled, !clicked, !swiped, frame.time - startTime <= tap.duration,
+                  maxMovement <= tap.movement, releasingAt == nil || frame.time - releasingAt! <= tap.releaseWindow else { return [] }
             let g = Gesture(fingers: start.count, direction: .tap), m = config.mapping(Gesture(fingers: start.count, direction: .tap), app: app)
             snapshot.gesture = g.title
             if let reason = config.blockedReason(g, mapping: m, device: device) { snapshot.reason = reason; return [] }
+            if let last = lastTap[start.count], frame.time >= last, frame.time-last < max(tap.cooldown,m.cooldown) { snapshot.reason = "Tap cooldown"; return [] }
+            lastTap[start.count] = frame.time
             return [GestureTrigger(gesture: g, mapping: m, count: 1)]
         }
         if cancelled { return [] }
         guard c.count == 3 || c.count == 4 else {
-            if !start.isEmpty { if releasingAt == nil { releasingAt = frame.time }; if frame.time - releasingAt! > 0.08 { cancel("Finger count changed") } }
+            if !start.isEmpty { if releasingAt == nil { releasingAt = frame.time }; if frame.time - releasingAt! > tap.releaseWindow { cancel("Finger count changed") } }
             return []
         }
         if start.isEmpty {
@@ -75,7 +81,7 @@ final class GestureEngine {
             return []
         }
         // A short settling window permits fingers landing a few milliseconds apart.
-        if c.count != start.count && frame.time - startTime < 0.04 && !swiped {
+        if c.count != start.count && frame.time - startTime <= config.tapOptions(fingers:c.count,app:app).landingWindow && !swiped && releasingAt == nil && c.count > start.count {
             start = c
             originX = c.map(\.x).reduce(0,+) / Double(c.count); originY = c.map(\.y).reduce(0,+) / Double(c.count)
             lastX = originX; lastY = originY; maxMovement = 0
@@ -84,7 +90,7 @@ final class GestureEngine {
         if c.count < start.count {
             guard c.allSatisfy({ f in start.contains { $0.id == f.id } }) else { cancel("Finger identity changed during release"); return [] }
             if releasingAt == nil { releasingAt = frame.time }
-            if frame.time-releasingAt! > 0.08 { cancel("Finger count changed") }
+            if frame.time-releasingAt! > tap.releaseWindow { cancel("Finger count changed") }
             return []
         }
         guard releasingAt == nil, c.count == start.count, Set(c.map(\.id)) == Set(start.map(\.id)) else { cancel("Finger identity/count changed"); return [] }
@@ -97,7 +103,7 @@ final class GestureEngine {
         }
         let totalX = (x-originX)*scale.width, totalY = (y-originY)*scale.height
         snapshot.dxMM = totalX; snapshot.dyMM = totalY
-        if hypot(totalX, totalY) >= sensitivity.activationMM || maxMovement > sensitivity.tapToleranceMM+1e-7 { swiped = true }
+        if hypot(totalX, totalY) >= tap.swipeCancellation || maxMovement > tap.movement+1e-7 { swiped = true }
         guard frame.time - startTime >= 0.04 else { return [] }
         if axis == nil {
             let ax = abs(totalX), ay = abs(totalY)
@@ -124,12 +130,14 @@ final class GestureEngine {
         var m = original
         if original.reverse { m.action = config.mapping(g, app: app).action }
         snapshot.gesture = g.title
+        if m.action.kind == .native { swiped = true }
         if let reason = config.blockedReason(g, mapping: m, device: device) { snapshot.reason = reason; remainder = 0; return [] }
         let distance = m.distanceMM ?? (horizontal ? sensitivity.horizontalMM : sensitivity.verticalMM)
         guard remainder + 1e-7 >= distance else { return [] }
         let continuous = m.continuous && m.action.supportsContinuous
         if !continuous && singleFired { remainder = 0; return [] }
         let count = continuous ? Int(floor((remainder + 1e-7)/distance)) : 1
+        swiped = true
         remainder = continuous ? max(0, remainder-Double(count)*distance) : 0
         guard count <= 64 else { cancel("Movement burst too large; lift fingers"); return [] }
         guard frame.time-lastFire >= m.cooldown else { return [] }

@@ -27,6 +27,8 @@ final class TrackpadDriver {
     private var lastPhysicalClick = -Double.infinity
     private var mouseButtons = Set<Int64>()
     private var generation = 0
+    private var clickGeneration = 0
+    private var press = PressRecognizer()
     private var tapObserver: CFMachPort?
     private var tapSource: CFRunLoopSource?
     private var observers: [NSObjectProtocol] = []
@@ -44,6 +46,7 @@ final class TrackpadDriver {
     var onButtonObserver: ((Bool) -> Void)?
     var onScrollFiltering: ((Bool) -> Void)?
     var currentGeneration: Int { queue.sync { generation } }
+    var currentClickGeneration: Int { queue.sync { clickGeneration } }
     init() { Self.current = self }
     private func symbol<T>(_ name: String, _ type: T.Type) -> T? {
         guard let library, let address = dlsym(library, name) else { return nil }
@@ -73,6 +76,7 @@ final class TrackpadDriver {
     func configure(_ config: Configuration, app: String) {
         let needsReconnect = queue.sync { () -> Bool in
             let old = engine.config.selectedDevice
+            if engine.config != config { press.reset(); clickGeneration += 1 }
             engine.config = config; engine.app = app; engine.cancel("Settings or foreground app changed; lift fingers")
             updateScrollEligibility()
             generation += 1
@@ -80,9 +84,9 @@ final class TrackpadDriver {
         }
         if needsReconnect { reconnect() }
     }
-    func cancel() { queue.sync { engine.cancel(); updateScrollEligibility(); generation += 1 } }
+    func cancel() { queue.sync { engine.cancel(); press.reset(); clickGeneration += 1; updateScrollEligibility(); generation += 1 } }
     func setPermissions(_ granted: Bool) {
-        queue.sync { if permitted != granted { permitted = granted; updateScrollEligibility() } }
+        queue.sync { if permitted != granted { permitted = granted; press.reset(); clickGeneration += 1; updateScrollEligibility() } }
         if granted { installScrollFilter() }
     }
     private func updateScrollEligibility() {
@@ -134,7 +138,7 @@ final class TrackpadDriver {
     }
     private func disconnect() {
         // Disable delivery before stopping/unregistering; queued frames cannot fire.
-        let old = queue.sync { () -> MTDeviceRef? in let old = activeDevice; activeDevice = nil; engine.reset(); scrollFilter.configure(custom:[]); generation += 1; return old }
+        let old = queue.sync { () -> MTDeviceRef? in let old = activeDevice; activeDevice = nil; engine.reset(); press.reset(); clickGeneration += 1; mouseButtons.removeAll(); lastPhysicalClick = -.infinity; scrollFilter.configure(custom:[]); generation += 1; return old }
         if let old { stop?(old); unregister?(old, trackpadFrameCallback) }
         devices = []; infos = []; deviceList = nil
         onDevices?([], ""); onStatus?("Trackpad paused / disconnected")
@@ -147,7 +151,7 @@ final class TrackpadDriver {
         let values = (0..<CFArrayGetCount(list)).compactMap { CFArrayGetValueAtIndex(list, $0) }.map { UnsafeMutableRawPointer(mutating: $0) }
         if values != devices { reconnect() }
         if !AXIsProcessTrusted() || !CGPreflightListenEventAccess() {
-            queue.sync { permitted = false; engine.cancel(); updateScrollEligibility(); generation += 1 }
+            queue.sync { permitted = false; engine.cancel(); press.reset(); clickGeneration += 1; updateScrollEligibility(); generation += 1 }
         }
         if let tapObserver, !CGEvent.tapIsEnabled(tap: tapObserver) { CGEvent.tapEnable(tap: tapObserver, enable: true) }
         if let scrollTap, !CGEvent.tapIsEnabled(tap:scrollTap) { CGEvent.tapEnable(tap:scrollTap,enable:true) }
@@ -157,7 +161,9 @@ final class TrackpadDriver {
         let received = ProcessInfo.processInfo.systemUptime
         queue.async { [weak self] in
             guard let self, device == self.activeDevice else { return }
-            let frame = TouchFrame(time: time, contacts: contacts, physicalButton: !self.mouseButtons.isEmpty || received-self.lastPhysicalClick < 0.1)
+            self.press.observe(contacts,time:received,scale:self.engine.config.movementScale(for:self.engine.device))
+            let tap = self.engine.config.tapOptions(fingers:contacts.count,app:self.engine.app)
+            let frame = TouchFrame(time: time, contacts: contacts, physicalButton: !self.mouseButtons.isEmpty || received-self.lastPhysicalClick < tap.clickExclusion)
             let triggers = self.engine.process(frame), app = self.engine.app, generation = self.generation
             self.scrollFilter.observe(contacts:contacts,trackedFingers:self.engine.trackedFingerCount,time:received)
             if received-self.lastPublish >= 1/20 || contacts.isEmpty {
@@ -167,10 +173,11 @@ final class TrackpadDriver {
             }
             for trigger in triggers {
                 guard trigger.gesture.direction != .tap || self.observerAvailable else { continue }
-                let delay = trigger.gesture.direction == .tap ? 0.08 : 0.0
+                let tap = self.engine.config.tapOptions(fingers:trigger.gesture.fingers,app:app)
+                let delay = trigger.gesture.direction == .tap ? tap.clickDelay : 0.0
                 DispatchQueue.main.asyncAfter(deadline: .now()+delay) { [weak self] in
                     guard let self else { return }
-                    let valid = self.queue.sync { generation == self.generation && (trigger.gesture.direction != .tap || self.lastPhysicalClick < received-0.1) }
+                    let valid = self.queue.sync { generation == self.generation && (trigger.gesture.direction != .tap || self.lastPhysicalClick < received-tap.clickExclusion) }
                     if trigger.gesture.direction == .tap {
                         guard let observer = self.tapObserver, CGEvent.tapIsEnabled(tap: observer) else { return }
                     }
@@ -216,9 +223,23 @@ final class TrackpadDriver {
             if event.getIntegerValueField(.eventSourceUserData) != ActionExecutor.eventTag, let driver = TrackpadDriver.current {
                 let down = [CGEventType.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(type)
                 let button = event.getIntegerValueField(.mouseEventButtonNumber)
+                let synthetic = event.getIntegerValueField(.eventSourceUnixProcessID) != 0
+                let received = ProcessInfo.processInfo.systemUptime
                 driver.queue.async {
                     if down { driver.mouseButtons.insert(button) } else { driver.mouseButtons.remove(button) }
-                    if down { driver.lastPhysicalClick = ProcessInfo.processInfo.systemUptime; driver.engine.physicalClick() }
+                    if down { driver.lastPhysicalClick = received; driver.engine.physicalClick() }
+                    let options = driver.engine.config.clickOptions(fingers:driver.press.fingers,app:driver.engine.app)
+                    guard (!synthetic || !options.ignoreSynthetic), driver.permitted, driver.activeDevice != nil else { return }
+                    guard let fingers = driver.press.button(Int(button),down:down,time:received,options:options) else { return }
+                    let gesture = Gesture(fingers:fingers,direction:.click), app = driver.engine.app
+                    let mapping = driver.engine.config.mapping(gesture,app:app), generation = driver.clickGeneration
+                    guard driver.engine.config.blockedReason(gesture,mapping:mapping,device:driver.engine.device) == nil else { return }
+                    driver.engine.observedPress(fingers)
+                    DispatchQueue.main.async { [weak driver] in
+                        guard let driver, ProcessInfo.processInfo.systemUptime-received < 0.25,
+                              let observer = driver.tapObserver, CGEvent.tapIsEnabled(tap:observer) else { return }
+                        driver.onTrigger?(GestureTrigger(gesture:gesture,mapping:mapping,count:1),app,generation)
+                    }
                 }
             }
             return Unmanaged.passUnretained(event)

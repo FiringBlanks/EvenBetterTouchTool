@@ -170,7 +170,7 @@ struct GestureGrid: View {
                         }
                     }
                 }
-                Label("Physical click remapping is unavailable. Native pass-through is unaffected by row switches.", systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
+                Label("Physical press actions also perform the normal mouse click. Native pass-through is unaffected by row switches.", systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
             }.padding(24)
         }.popover(item: $selected, arrowEdge: .bottom) { g in
             MappingEditor(model: model, gesture: g, profileID: model.selectedProfile).frame(width: 600, height: 620)
@@ -194,9 +194,9 @@ struct GestureGrid: View {
             VStack(spacing: 8) {
                 Image(systemName: symbol(g.direction)).font(.title3)
                 Text(m.action.kind.title).font(.caption.weight(.medium)).multilineTextAlignment(.center).frame(maxWidth: .infinity, minHeight: 32)
-                Text(g.direction == .click ? "Unsupported" : !rowEnabled ? "Row disabled" : !m.enabled ? "Disabled" : m.continuous && m.action.supportsContinuous ? "Continuous" : "Single").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text(!rowEnabled ? "Row disabled" : !m.enabled ? "Disabled" : m.continuous && m.action.supportsContinuous ? "Continuous" : "Single").font(.system(size: 10)).foregroundStyle(.secondary)
             }.padding(10).frame(maxWidth: .infinity, minHeight: 120)
-                .background(rowEnabled && m.enabled && g.direction != .click ? Color.accentColor.opacity(0.09) : Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                .background(rowEnabled && m.enabled ? Color.accentColor.opacity(0.09) : Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.secondary.opacity(0.15)))
                 .opacity(rowEnabled ? 1 : 0.5)
         }.buttonStyle(.plain).accessibilityLabel("\(g.title): \(m.action.kind.title)\(rowEnabled ? "" : ", row disabled")")
@@ -236,7 +236,7 @@ struct MappingEditor: View {
             }.padding(20)
             Divider()
             Form {
-                if gesture.direction == .click { Section { Text("Physical click remapping is unavailable. Normal physical clicks remain native and cancel custom taps.") } }
+                if gesture.direction == .click { Section { Text("Runs on release of a physical mouse press while the required fingers rest on the selected trackpad. The normal mouse click still happens. Another mouse can also trigger it while those fingers are resting.").font(.callout) } }
                 if !profileID.isEmpty {
                     Section {
                         Toggle("Use global mapping", isOn: $inherited)
@@ -252,7 +252,25 @@ struct MappingEditor: View {
                     }
                     ActionParameters(action: $draft.action, model: model)
                     if draft.action.kind == .notificationCenter { Text("Assign a custom keyboard shortcut to open Notification Center.").foregroundStyle(.orange) }
-                }.disabled(gesture.direction == .click || inherited)
+                }.disabled(inherited)
+                if gesture.direction == .tap {
+                    Section("Tap settings") {
+                        Toggle("Override tap settings", isOn: Binding(get: { draft.tapOptions != nil }, set: { draft.tapOptions = $0 ? model.config.sensitivity(for:profileID).effectiveTapOptions : nil }))
+                        if draft.tapOptions != nil {
+                            TapControls(value:Binding(get:{draft.tapOptions ?? TapOptions()},set:{draft.tapOptions=$0}),unit:model.distanceUnit)
+                        }
+                        NumericSlider(title:"Gesture cooldown",value:$draft.cooldown,range:0...3,unit:"s")
+                    }.disabled(inherited)
+                }
+                if gesture.direction == .click {
+                    Section("Physical press settings") {
+                        Toggle("Override press settings",isOn:Binding(get:{draft.clickOptions != nil},set:{draft.clickOptions = $0 ? model.config.sensitivity(for:profileID).effectiveClickOptions : nil}))
+                        if draft.clickOptions != nil {
+                            PressControls(value:Binding(get:{draft.clickOptions ?? ClickOptions()},set:{draft.clickOptions=$0}),unit:model.distanceUnit)
+                        }
+                        NumericSlider(title:"Gesture cooldown",value:$draft.cooldown,range:0...3,unit:"s")
+                    }.disabled(inherited)
+                }
                 if gesture.direction.isSwipe {
                     Section("Movement") {
                         Toggle("Continuous", isOn: Binding(get: { draft.continuous && draft.action.supportsContinuous }, set: { draft.continuous = $0 }))
@@ -357,6 +375,35 @@ struct NumericSlider: View {
     }
 }
 
+struct TapControls: View {
+    @Binding var value: TapOptions
+    var unit: String
+    var body: some View {
+        NumericSlider(title:"Maximum tap duration",value:$value.duration,range:0.05...1.5,unit:"s")
+        NumericSlider(title:"Finger movement tolerance",value:$value.movement,range:0.1...10,unit:unit)
+        NumericSlider(title:"Swipe cancels tap",value:$value.swipeCancellation,range:0.1...10,unit:unit)
+        NumericSlider(title:"Finger landing window",value:$value.landingWindow,range:0...0.4,unit:"s")
+        NumericSlider(title:"Finger lift window",value:$value.releaseWindow,range:0.02...0.5,unit:"s")
+        NumericSlider(title:"Tap cooldown",value:$value.cooldown,range:0...2,unit:"s")
+        NumericSlider(title:"Wait for physical click",value:$value.clickDelay,range:0...0.25,unit:"s")
+        NumericSlider(title:"Click exclusion window",value:$value.clickExclusion,range:0.02...0.5,unit:"s")
+        Text("A triggered swipe or physical press always cancels its tap. Changes require Save.").font(.caption).foregroundStyle(.secondary)
+    }
+}
+struct PressControls: View {
+    @Binding var value: ClickOptions
+    var unit: String
+    var body: some View {
+        Picker("Mouse button",selection:$value.button) { Text("Primary").tag(0); Text("Secondary").tag(1); Text("Middle").tag(2) }
+        NumericSlider(title:"Contact freshness",value:$value.contactAge,range:0.02...0.5,unit:"s")
+        NumericSlider(title:"Fingers resting before press",value:$value.settleTime,range:0...0.3,unit:"s")
+        NumericSlider(title:"Finger landing grace after press",value:$value.landingWindow,range:0...0.3,unit:"s")
+        NumericSlider(title:"Maximum press duration",value:$value.maxDuration,range:0.1...10,unit:"s")
+        NumericSlider(title:"Press movement tolerance",value:$value.movement,range:0.1...20,unit:unit)
+        NumericSlider(title:"Press cooldown",value:$value.cooldown,range:0...3,unit:"s")
+        Toggle("Ignore synthesized mouse presses",isOn:$value.ignoreSynthetic)
+    }
+}
 struct SensitivityControls: View {
     @Binding var value: Sensitivity
     var unit: String
@@ -367,9 +414,13 @@ struct SensitivityControls: View {
             NumericSlider(title:"Vertical interval",value:$value.verticalMM,range:0.5...20,unit:unit)
             NumericSlider(title:"Volume step",value:$value.volumePercent,range:0.1...20,unit:"%")
         }
+        Section("Taps") {
+            TapControls(value:$value.effectiveTapOptions,unit:unit)
+        }
+        Section("Physical presses") {
+            PressControls(value:$value.effectiveClickOptions,unit:unit)
+        }
         Section("Recognition") {
-            NumericSlider(title:"Tap duration",value:$value.tapDuration,range:0.05...1,unit:"s")
-            NumericSlider(title:"Tap tolerance",value:$value.tapToleranceMM,range:0.1...5,unit:unit)
             NumericSlider(title:"Swipe activation",value:$value.activationMM,range:0.1...10,unit:unit)
             NumericSlider(title:"Diagonal rejection",value:$value.diagonalRatio,range:1.05...4,unit:"×")
             NumericSlider(title:"Jitter tolerance",value:$value.jitterMM,range:0...0.5,unit:unit)
@@ -513,7 +564,7 @@ struct SetupView: View {
             Section("3 · Resolve tap conflicts") {
                 Text("In Trackpad → Point & Click: turn OFF “Look up & data detectors” and “Tap to click”. Keep three-finger dragging OFF. This conservative setup prevents ordinary tap clicks and native Look Up during custom multi-finger taps. Physical clicks still work normally and cancel custom tap recognition.")
                 Toggle("I disabled Look Up, Tap to click, and three-finger dragging",isOn:$model.config.safety.tapConflictsResolved)
-                Text("Taps also require a working mouse-button observer. Physical click remapping is disabled. No mouse events are swallowed.").font(.caption).foregroundStyle(.secondary)
+                Text("Taps also require a working mouse-button observer. Physical press actions retain the normal mouse click. No mouse-button events are swallowed.").font(.caption).foregroundStyle(.secondary)
             }
             Section("4 · Verify system shortcuts") {
                 Text("In Keyboard → Keyboard Shortcuts → Mission Control, enable and verify Mission Control and Application windows. The app reads explicit configured shortcuts when available. If none can be read, use General → System Shortcuts to confirm a fallback. Calibration is optional; relative sensitivity works without measurements.")

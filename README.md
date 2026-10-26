@@ -2,11 +2,11 @@
 
 A free, MIT-licensed native SwiftUI menu bar app built from [firedev/threefinger](https://github.com/firedev/threefinger). Customize three- and four-finger gestures with app profiles, continuous relative or calibrated movement, media controls, Core Audio volume, and a graphical setup/diagnostics interface. No subscriptions, dependencies, analytics, or network updater.
 
-**Requires macOS 14+, Apple Silicon, and Xcode Command Line Tools to build.** The raw contact driver uses Apple's private MultitouchSupport framework; future OS compatibility is not guaranteed. Physical multi-finger click remapping is disabled. See [compatibility and API investigation](docs/COMPATIBILITY.md) before enabling custom input.
+**Requires macOS 14+, Apple Silicon, and Xcode Command Line Tools to build.** The raw contact driver uses Apple's private MultitouchSupport framework; future OS compatibility is not guaranteed. Physical press actions are opt-in and retain the normal mouse click. See [compatibility and API investigation](docs/COMPATIBILITY.md) before enabling custom input.
 
 ## Download and change settings
 
-Download the [Apple Silicon release ZIP](https://github.com/FiringBlanks/EvenBetterTouchTool/releases/download/v2.3.0/EvenBetterTouchTool-2.3.0-arm64.zip) from [GitHub Releases](https://github.com/FiringBlanks/EvenBetterTouchTool/releases). Extract it and run `Install.command` (or `./install.sh` in Terminal). The installer places the app in your personal Applications folder, creates a launch shortcut in the main Applications folder (or on the desktop if that folder is unavailable), and safely stops the original threefinger service if present. The app is also included directly in the ZIP.
+Download the [Apple Silicon release ZIP](https://github.com/FiringBlanks/EvenBetterTouchTool/releases/download/v2.4.0/EvenBetterTouchTool-2.4.0-arm64.zip) from [GitHub Releases](https://github.com/FiringBlanks/EvenBetterTouchTool/releases). Extract it and run `Install.command` (or `./install.sh` in Terminal). The installer places the app in your personal Applications folder, creates a launch shortcut in the main Applications folder (or on the desktop if that folder is unavailable), and safely stops the original threefinger service if present. The app is also included directly in the ZIP.
 
 After installation, open **Finder → Applications → EvenBetterTouchTool** (or the desktop shortcut). Drag that icon into the Dock if you want one-click access. The shortcut opens the installed app.
 
@@ -48,12 +48,12 @@ If no gestures work or a permission list says “No Items”, follow the [step-b
 | --- | --- |
 | Three-finger left/right | Previous/next tab in Chrome and Finder profiles only; 1% of trackpad width per step (1 mm when calibrated) |
 | Three-finger up/down | Mission Control / App Exposé, once per contact session |
-| Three-finger tap | Dedicated system Play/Pause media command |
-| Three-finger physical click | Middle click is the intended action but mapping is **disabled / unsupported** |
+| Three-finger tap | Disabled; Play/Pause remains available to assign |
+| Three-finger physical click | Play/Pause available as an opt-in press action; disabled until enabled |
 | Four-finger left/right | Native desktop gesture; sends no synthetic event |
 | Four-finger up/down | Volume up/down, 2 percentage points per 4% of trackpad height (4 mm when calibrated) |
 | Four-finger tap | Mute/unmute |
-| Four-finger physical click | Unassigned and unsupported |
+| Four-finger physical click | Unassigned; configurable press action |
 
 The defaults describe a fresh configuration. Migration preserves your existing explicit shortcut mappings as global one-shot sequences, including old Chrome/Finder overrides; it backs up the original JSON first. An old normalized threshold cannot be converted to mm without calibration and stays recorded in that backup. Restore an individual cell or app profile to adopt the new defaults.
 
@@ -65,7 +65,7 @@ The native settings window provides Dashboard, a 2×6 gesture grid with cell edi
 
 Profiles resolve **enabled application override → global mapping → no action/native pass-through**. A disabled app profile falls back to global; a disabled cell inside an enabled profile explicitly blocks that gesture. Unedited app cells inherit global mappings. Profile sensitivity is independently configurable. Additional applications initially have no tab behavior until you add a profile or global action.
 
-Available actions include tab/desktop navigation, Mission Control, App Exposé, Show Desktop, recent-app switching, browser Back/Forward, system Play/Pause/Next/Previous Track, volume/mute, Lock Screen, screenshot UI, mouse down/up pairs, custom keyboard shortcuts and ordered sequences, opening/activating applications, target-app shortcuts, No Action, and native pass-through. Each action exposes relevant parameters. Notification Center has no reliable public opening API here: assign a custom user-configured system shortcut instead. Click-trigger mappings remain unavailable, but a middle-click **action** may be assigned to another supported gesture. Single-shortcut sequences (including migrated settings) and single application-specific shortcuts support Continuous. Multi-step sequences and disruptive system actions run once per contact session. In an inherited app mapping, choose Customize for This App before editing; Save commits the override.
+Available actions include tab/desktop navigation, Mission Control, App Exposé, Show Desktop, recent-app switching, browser Back/Forward, system Play/Pause/Next/Previous Track, volume/mute, Lock Screen, screenshot UI, mouse down/up pairs, custom keyboard shortcuts and ordered sequences, opening/activating applications, target-app shortcuts, No Action, and native pass-through. Each action exposes relevant parameters. Notification Center has no reliable public opening API here: assign a custom user-configured system shortcut instead. Click-trigger mappings can run an action after a physical press/release with three or four fingers resting on the selected trackpad. The normal mouse click is retained; assigning a mouse action therefore produces both clicks. Quartz does not identify the mouse device, so an external mouse may also trigger the action when those fingers rest on the trackpad. Single-shortcut sequences (including migrated settings) and single application-specific shortcuts support Continuous. Multi-step sequences and disruptive system actions run once per contact session. In an inherited app mapping, choose Customize for This App before editing; Save commits the override.
 
 Chrome uses Command–Option–Arrow. Finder uses Control–Tab / Control–Shift–Tab after a focused-window accessibility check for multiple tab controls; no eligible window means no action. Finder's hierarchy needs on-device validation. Media actions use dedicated system media events, **not F8**. Volume uses the current default output device's Core Audio properties and reports unsupported hardware volume/mute gracefully. Volume gestures display a nonactivating panel below the app’s menu bar icon, with the actual output percentage; the icon temporarily becomes a speaker with a percentage. It closes two seconds after the last successful adjustment. This is EvenBetterTouchTool’s indicator, not macOS Control Center’s Sound panel.
 
@@ -75,7 +75,7 @@ Configuration remains at `~/.config/threefinger.json` with `schemaVersion: 2`. A
 
 Gesture editors have a close button and dismiss when you click outside or press Escape; those dismissal paths discard local edits. The editor’s blue **Save** commits only that gesture and leaves unrelated edits pending. Its **Reset** restores the values from when the editor opened; **Restore Default** stages the default for that gesture. The main window’s **Reset** discards all pending changes, and its **Save** applies all remaining pending settings.
 
-Click the hand in the **Fingers** column to stage enabling/disabling the entire three- or four-finger row. Disabled rows are dimmed and marked Off. Individual mappings are preserved when a row is re-enabled; unsupported clicks remain unsupported. Per-app row choices override global row choices. A row switch only gates custom actions; native macOS gestures cannot be disabled by this app.
+Click the hand in the **Fingers** column to stage enabling/disabling the entire three- or four-finger row. Disabled rows are dimmed and marked Off. Individual mappings are preserved when a row is re-enabled; individually disabled click mappings stay disabled. Per-app row choices override global row choices. A row switch only gates custom actions; native macOS gestures cannot be disabled by this app.
 
 Valid external JSON edits reload within two seconds. If an external edit arrives while drafts exist, the app retains them and asks you to Reset and review the saved configuration before saving, preventing accidental overwrites. Invalid external edits pause custom actions. Imported local consent/calibration is cleared, and imports remain pending until Save. Export writes only the saved configuration. **Emergency disable is immediate and temporary**; it never writes settings implicitly. Click Save to persist a disabled master switch.
 
@@ -130,7 +130,7 @@ See [build/validation results and the file manifest](docs/VALIDATION.md). Run `m
 - Finder does nothing: use multiple tabs in the focused Finder window. If the OS exposes a different accessibility hierarchy, the guard deliberately does nothing.
 - Mission Control/Show Desktop/desktops do nothing: use Diagnostics → Test system actions, then enable/check the corresponding macOS shortcut and Save a verified fallback in General. Show Desktop needs its own shortcut (often F11); assigning the action alone does not configure a fallback. Explicitly disabled OS shortcuts stay disabled, even with a saved fallback. Synthesized shortcuts include balanced modifier edges and navigation/function flags. Native pass-through only works while the matching native gesture is enabled.
 - Media does nothing: establish a macOS-recognized media session; compare with the dedicated keyboard media key. Confirm Accessibility and inspect the diagnostic action result.
-- Physical press fires a tap: disable the tap mapping and record diagnostics. Physical click interception is unsupported; no reliability claim is made for inter-stream timing before hardware tests.
+- Physical press fires a tap or misses its press action: inspect Diagnostics, contact freshness, finger landing grace, press duration/movement, and cooldown. The press action requires a physical mouse down/up and fresh selected-trackpad contacts. Synthesized mouse presses are ignored by default. Press actions retain the original mouse click; another mouse can also satisfy the correlation. Disable that mapping if it conflicts with your workflow.
 - Volume unsupported: some outputs expose no software volume or mute. Use that device's hardware controls.
 - Invalid configuration: preserve/back up the file, repair JSON/ranges/version, then reimport or restart. Errors do not authorize overwriting the original without backup.
 - Start at Login fails: install in Applications first; inspect General → Login Items in System Settings. No launch-on-login behavior has been physically tested in this build environment.
@@ -149,3 +149,9 @@ The uninstaller unregisters the app's login item, removes only Applications/desk
 ### Custom swipes and underlying scrolling
 
 An active Quartz filter correlates continuous scroll events with fresh contacts from the selected trackpad and the saved app/profile mappings. It suppresses custom swipe scrolling and its momentum; ordinary two-finger scrolls, line-based mouse wheels, synthetic scrolling, and Native Pass Through directions remain available. If interception cannot be installed, custom swipe actions pause and Dashboard reports it. The filter cannot identify a trackpad from a public scroll event alone, so correlation and the first events of a mixed native/custom axis need physical testing; do not treat this as guaranteed suppression of every native gesture.
+
+### Forgiving tap and physical press controls
+
+Fresh tap defaults allow 0.50 seconds of contact, 0.15 seconds for fingers to land, 0.20 seconds for them to lift, and movement up to 2 mm (or 2% in relative mode). A 1.5-unit coherent swipe cancels the tap; any swipe that actually triggers an action, and any physical press, also cancels it. Tap cooldown defaults to 0.25 seconds. These thresholds are independently adjustable, so increasing movement tolerance does not require changing continuous swipe intervals.
+
+Sensitivity exposes all tap and physical press controls globally and in application sensitivity overrides. Each Tap/Click cell also offers its own override. Tap controls include duration, finger drift, swipe cancellation, landing/lift windows, cooldown, waiting for a physical click, and click exclusion. Press controls include mouse button, contact freshness, resting time, late-contact grace, maximum press duration, movement tolerance, cooldown, and ignoring synthesized presses. Every edit requires Save; Reset discards it. Stored pre-2.4 duration and movement values still load, and missing new option blocks use defaults. Physical press actions fire on mouse-button release, never just from touching the trackpad.

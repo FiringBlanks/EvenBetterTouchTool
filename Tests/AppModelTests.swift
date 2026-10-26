@@ -189,6 +189,15 @@ import CoreGraphics
             let events=KeyboardEvents.make(Shortcut(keyCode:126,modifiers:["control"]),physical:.maskControl)
             try expect(events.count==2 && events.allSatisfy { $0.flags.contains(.maskControl) && $0.getIntegerValueField(.keyboardEventKeycode)==126 })
         }
+        test("Tap and press overrides remain pending until explicit Save") { model, url in
+            let before=try Data(contentsOf:url); let g=Gesture(fingers:3,direction:.click)
+            model.config.sensitivity.effectiveTapOptions=TapOptions(duration:0.7)
+            try expect(try Data(contentsOf:url)==before && model.savedConfig.sensitivity.effectiveTapOptions.duration==0.5)
+            let mapping=Mapping(action:Action(kind:.playPause),clickOptions:ClickOptions(contactAge:0.2))
+            try expect(model.saveMapping(mapping,gesture:g,profileID:""))
+            try expect(model.savedConfig.mappings[g.id]?.enabled==true && model.savedConfig.sensitivity.effectiveTapOptions.duration==0.5 && model.hasPendingChanges)
+            model.resetEdits(); try expect(!model.hasPendingChanges && model.config.sensitivity.effectiveTapOptions.duration==0.5)
+        }
         print("\n\(passed) model tests passed; \(failed) failed")
         if failed > 0 { exit(1) }
     }

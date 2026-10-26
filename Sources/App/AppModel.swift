@@ -7,7 +7,7 @@ struct InstalledApplication: Identifiable {
     var id: String; var name: String; var url: URL
 }
 final class AppModel: ObservableObject {
-    static let version = "2.3.0"
+    static let version = "2.4.0"
     private(set) var settingsVisible = false
     var distanceUnit: String { config.movementScale(for: activeDevice).unit }
     var savedDistanceUnit: String { savedConfig.movementScale(for: activeDevice).unit }
@@ -29,6 +29,7 @@ final class AppModel: ObservableObject {
         guard gestureBlockers.isEmpty else { return 0 }
         return Gesture.all.filter { g in
             guard g.direction != .tap || (buttonObserver && savedConfig.safety.tapConflictsResolved) else { return false }
+            guard g.direction != .click || buttonObserver else { return false }
             return savedConfig.blockedReason(g, mapping: savedConfig.mapping(g, app: foreground), device: activeDevice) == nil
         }.count
     }
@@ -94,8 +95,14 @@ final class AppModel: ObservableObject {
             }
         }
         driver.onTrigger = { [weak self] trigger, app, generation in
-            guard let self, self.savedConfig.enabled, !self.runtimePaused, self.legacyPIDs.isEmpty, self.calibrationAxis == nil, generation == self.driver.currentGeneration,
-                  self.accessibility, self.inputMonitoring, NSWorkspace.shared.frontmostApplication?.bundleIdentifier == app,
+            guard let self else { return }
+            let click = trigger.gesture.direction == .click
+            let foreground = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+            let independentMedia = click && [.playPause,.nextTrack,.previousTrack,.volumeUp,.volumeDown,.mute].contains(trigger.mapping.action.kind)
+            guard self.savedConfig.enabled, !self.runtimePaused, self.legacyPIDs.isEmpty, self.calibrationAxis == nil,
+                  generation == (click ? self.driver.currentClickGeneration : self.driver.currentGeneration),
+                  self.accessibility, self.inputMonitoring,
+                  foreground == app || (independentMedia && self.savedConfig.mapping(trigger.gesture,app:foreground) == trigger.mapping),
                   self.configurationIssue.isEmpty, self.savedConfig.blockedReason(trigger.gesture, mapping: trigger.mapping, device: self.activeDevice) == nil else { return }
             if trigger.gesture.direction.isSwipe && !self.scrollFiltering { self.record("Custom swipe paused: scroll interception unavailable"); return }
             self.executor.execute(trigger, app: app, config: self.savedConfig)

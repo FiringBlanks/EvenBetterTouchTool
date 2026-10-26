@@ -72,16 +72,28 @@ struct Mapping: Codable, Equatable {
     var distanceMM: Double? = nil
     var cooldown: Double = 0
     var reverse = false
+    var tapOptions: TapOptions? = nil
+    var clickOptions: ClickOptions? = nil
 }
 struct Sensitivity: Codable, Equatable {
     var horizontalMM = 1.0
     var verticalMM = 4.0
-    var tapDuration = 0.25
-    var tapToleranceMM = 0.8
+    var tapDuration = 0.50
+    var tapToleranceMM = 2.0
     var activationMM = 0.5
     var diagonalRatio = 1.35
     var volumePercent = 2.0
     var jitterMM = 0.05
+    var tapOptions: TapOptions? = nil
+    var clickOptions: ClickOptions? = nil
+    var effectiveTapOptions: TapOptions {
+        get { tapOptions ?? TapOptions(duration:tapDuration,movement:tapToleranceMM) }
+        set { tapOptions = newValue; tapDuration = newValue.duration; tapToleranceMM = newValue.movement }
+    }
+    var effectiveClickOptions: ClickOptions {
+        get { clickOptions ?? ClickOptions() }
+        set { clickOptions = newValue }
+    }
 }
 struct Calibration: Codable, Equatable {
     var widthMM = 0.0
@@ -139,8 +151,8 @@ struct Configuration: Codable, Equatable {
             switch (g.fingers, g.direction) {
             case (3, .up): m.action.kind = .missionControl
             case (3, .down): m.action.kind = .appExpose
-            case (3, .tap): m.action.kind = .playPause
-            case (3, .click): m.action.kind = .middleClick; m.enabled = false
+            case (3, .tap): m.action.kind = .playPause; m.enabled = false
+            case (3, .click): m.action.kind = .playPause; m.enabled = false
             case (4, .left), (4, .right): m.action.kind = .native
             case (4, .up): m.action.kind = .volumeUp; m.continuous = true
             case (4, .down): m.action.kind = .volumeDown; m.continuous = true
@@ -171,6 +183,15 @@ struct Configuration: Codable, Equatable {
     }
     func sensitivity(for app: String) -> Sensitivity { profile(app)?.sensitivity ?? sensitivity }
     func movementScale(for device: String) -> MovementScale { MovementScale(calibrations[device]) }
+    func tapOptions(fingers: Int, app: String) -> TapOptions {
+        mapping(Gesture(fingers:fingers,direction:.tap),app:app).tapOptions ?? sensitivity(for:app).effectiveTapOptions
+    }
+    func clickOptions(fingers: Int, app: String) -> ClickOptions {
+        let mapping = mapping(Gesture(fingers:fingers,direction:.click),app:app)
+        var options = mapping.clickOptions ?? sensitivity(for:app).effectiveClickOptions
+        options.cooldown = max(options.cooldown,mapping.cooldown)
+        return options
+    }
     func scrollInterceptedGestures(app: String, device: String) -> Set<Gesture> {
         Set(Gesture.all.filter { physical in
             guard physical.direction.isSwipe else { return false }
@@ -186,7 +207,6 @@ struct Configuration: Codable, Equatable {
         if !enabled { return "Engine disabled" }
         if !mapping.enabled || mapping.action.kind == .none { return "No action" }
         if mapping.action.kind == .native { return "Native gesture: observing only" }
-        if g.direction == .click { return "Physical click remapping is unsupported on this build" }
         if mapping.action.kind == .notificationCenter { return "Notification Center: assign your configured keyboard shortcut instead" }
         if !safety.nativeConflictsResolved { return "Complete native gesture conflict setup" }
         if g.fingers == 4 && [.left, .right].contains(g.direction) && !safety.nativeHorizontalDisabled { return "Disable native desktop swipes before reassigning them" }
@@ -198,7 +218,8 @@ struct Configuration: Codable, Equatable {
         try require(schemaVersion == 2, "Unsupported configuration version")
         func validate(_ s: Sensitivity) throws {
             try require([s.horizontalMM, s.verticalMM].allSatisfy { $0.isFinite && (0.5...20).contains($0) }, "Distance must be 0.5–20 mm")
-            try require((0.05...1).contains(s.tapDuration) && (0.1...5).contains(s.tapToleranceMM) && (0.1...10).contains(s.activationMM) && (1.05...4).contains(s.diagonalRatio) && (0...0.5).contains(s.jitterMM) && (0.1...20).contains(s.volumePercent), "Invalid sensitivity")
+            try require((0.05...1.5).contains(s.tapDuration) && (0.1...10).contains(s.tapToleranceMM) && (0.1...10).contains(s.activationMM) && (1.05...4).contains(s.diagonalRatio) && (0...0.5).contains(s.jitterMM) && (0.1...20).contains(s.volumePercent), "Invalid sensitivity")
+            try s.effectiveTapOptions.validate(); try s.effectiveClickOptions.validate()
         }
         func validateShortcut(_ s: Shortcut) throws {
             try require(s.keyCode <= 127 && s.modifiers.allSatisfy { ["command", "option", "shift", "control", "fn"].contains($0) } && (0...2).contains(s.delay), "Invalid keyboard shortcut")
@@ -209,6 +230,7 @@ struct Configuration: Codable, Equatable {
         for p in profiles { if let s = p.sensitivity { try validate(s) } }
         for c in calibrations.values { try require(c.widthMM.isFinite && c.heightMM.isFinite && (!c.confirmed || c.valid), "Invalid calibration") }
         for (id, m) in Array(mappings) + profiles.flatMap({ Array($0.mappings) }) {
+            try m.tapOptions?.validate(); try m.clickOptions?.validate()
             try require(Gesture.all.contains { $0.id == id }, "Unknown gesture \(id)")
             try require(m.distanceMM == nil || (0.5...20).contains(m.distanceMM!), "Invalid mapping distance")
             try require((0...5).contains(m.cooldown), "Invalid cooldown")

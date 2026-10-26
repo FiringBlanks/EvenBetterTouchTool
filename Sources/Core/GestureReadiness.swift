@@ -44,7 +44,7 @@ enum GestureReadiness {
         if !scrollFiltering && Gesture.all.contains(where: { $0.direction.isSwipe && config.blockedReason($0,mapping:config.mapping($0,app:app),device:device) == nil }) { result.append(.scrollFiltering) }
         if !Gesture.all.contains(where: {
             let m = config.mapping($0, app: app)
-            return m.enabled && $0.direction != .click && ![.none, .native, .notificationCenter].contains(m.action.kind)
+            return m.enabled && ![.none, .native, .notificationCenter].contains(m.action.kind)
         }) { result.append(.noMappings) }
         return result
     }

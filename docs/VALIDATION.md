@@ -3,9 +3,9 @@
 ## Artifacts
 
 - Standalone Apple Silicon application: `build/EvenBetterTouchTool.app`
-- Installable archive: `build/EvenBetterTouchTool-2.3.0-arm64.zip`
-- Archive checksum: `build/EvenBetterTouchTool-2.3.0-arm64.zip.sha256`
-- Raw local build/test log: `build/input-feedback-check-final.log`
+- Installable archive: `build/EvenBetterTouchTool-2.4.0-arm64.zip`
+- Archive checksum: `build/EvenBetterTouchTool-2.4.0-arm64.zip.sha256`
+- Raw local build/test log: `build/press-taps-check.log`
 - Double-click installer: `Install.command`
 - Local installer: `install.sh` (inspect using `./install.sh --dry-run` first)
 - Uninstaller: `uninstall.sh`
@@ -19,7 +19,7 @@ Build host: Apple Silicon, macOS 26.6.2, Swift 6.3.2, Command Line Tools. Target
 `make check` completed successfully:
 
 - Native application compilation: PASS, no compiler warnings.
-- Deterministic automated core suite: **143 core + 25 app-model + 14 shortcut lifecycle tests passed, 0 failed (182 total)**.
+- Deterministic automated core suite: **167 core + 26 app-model + 14 shortcut lifecycle tests passed, 0 failed (207 total)**.
 - `--smoke-test`: PASS (default schema validation and AppKit-linked executable startup).
 - `codesign --verify --strict`: PASS.
 - App `Info.plist` validation: PASS.
@@ -35,7 +35,7 @@ The installer dry run successfully detected the original exact-name same-user da
 
 Follow [MANUAL-TESTS.md](MANUAL-TESTS.md) on the intended M4 MacBook Air. In particular, actual device callback compatibility, distance calibration accuracy, native gesture conflicts, Finder tab accessibility structure, media delivery to Music/Spotify/browsers, hardware audio controls, physical press versus tap timing, permission revocation, sleep/wake/reconnection, actual startup at login, emergency shortcut under real input, and idle CPU have **not** been hardware validated. Automated command-plan tests do not prove those behaviors.
 
-Physical multi-finger click remapping is disabled; Notification Center has no built-in opening action. The raw driver and symbolic shortcut preference IDs use private/undocumented interfaces. Unsupported audio devices fail with diagnostics. See [COMPATIBILITY.md](COMPATIBILITY.md) for the full API investigation, safety gates, and alternatives.
+Physical multi-finger press actions are opt-in and retain the native click; Notification Center has no built-in opening action. The raw driver and symbolic shortcut preference IDs use private/undocumented interfaces. Unsupported audio devices fail with diagnostics. See [COMPATIBILITY.md](COMPATIBILITY.md) for the full API investigation, safety gates, and alternatives.
 
 ## File manifest
 
@@ -123,3 +123,9 @@ Build, smoke, signature, metadata, and script checks passed. The core suite test
 The disabled UI preview showed the three system-action buttons, volume preview, and filter status. Clicking Preview Volume Indicator changed its status from Hidden to Visible, then back to Hidden automatically; the preview changes no system volume. The menu-bar controller falls back to the screen's top-right corner if its icon is hidden. System Settings was inspected: native Mission Control is four-finger up, native App Exposé is Off, and keyboard Mission Control/Applications windows/Show Desktop are enabled on Control-Up/Control-Down/F11. This verifies configuration, not physical gesture delivery. Actual browser scroll interception, native system action delivery, and audio-level feedback remain physical acceptance checks after permission approval.
 
 New components: `Sources/Core/ScrollFilter.swift`, `KeyboardPlan.swift`, `SystemShortcutChoice.swift`, and `VolumePresentation.swift`; `Sources/App/VolumeIndicator.swift` owns the nonactivating feedback panel. No private Control Center or native-gesture suppression interface is used.
+
+## Version 2.4.0 checks
+
+The pure press recognizer tests mouse down/up, three/four contacts, wrong count/button, stale frames, late contact arrival, release ordering, drag motion, replaced fingers, cooldown, reset, and tap cancellation. Tap tests cover forgiving holds, staggered release, late fourth-finger landing, drift, independent swipe cancellation, cooldown, per-app/cell overrides, old schemas, validation, and persistence. Existing distance/native-scroll/keyboard/volume tests remain passing.
+
+The isolated disabled preview enabled Click → Play/Pause, opened and edited its complete press options, and explicitly saved the mapping. It then saved a forgiving tap override without enabling that Tap mapping. Both persisted in the preview JSON. No gesture engine ran and no playback event was posted during preview checks. Actual hardware pressing, native click side effects, cross-device correlation, and active media-session behavior remain manual acceptance checks. `Sources/Core/TouchOptions.swift` contains the parameter types and pure press recognizer; the existing listen-only button tap performs runtime correlation.
