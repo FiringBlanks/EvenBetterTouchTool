@@ -141,7 +141,7 @@ struct GestureGrid: View {
         return Button { model.toggleRow(fingers) } label: {
             HStack(spacing:8) {
                 Circle().fill(enabled ? Color.accentColor:Color.secondary.opacity(0.35)).frame(width:6,height:6)
-                Image(systemName:"hand.draw").font(.system(size:19,weight:.medium))
+                Text(String(fingers)).font(.system(size:18,weight:.semibold,design:.rounded)).monospacedDigit()
                     .foregroundStyle(enabled ? Color.primary:Color.secondary)
                     .frame(width:36,height:40).background(Color.secondary.opacity(enabled ? 0.08:0.04),in:RoundedRectangle(cornerRadius:9))
                     .opacity(enabled ? 1:0.5)

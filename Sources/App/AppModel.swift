@@ -13,7 +13,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 enum SetupTarget: Hashable { case permissions, applications, advanced, calibration, shortcuts, diagnostics }
 enum GestureTarget: Hashable { case grid, sensitivity }
 final class AppModel: ObservableObject {
-    static let version = "2.7.0"
+    static let version = "2.7.1"
     private(set) var settingsVisible = false
     var distanceUnit: String { config.movementScale(for: activeDevice).unit }
     var savedDistanceUnit: String { savedConfig.movementScale(for: activeDevice).unit }

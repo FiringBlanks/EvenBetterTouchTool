@@ -3,9 +3,9 @@
 ## Artifacts
 
 - Standalone Apple Silicon application: `build/EvenBetterTouchTool.app`
-- Installable archive: `build/EvenBetterTouchTool-2.7.0-arm64.zip`
-- Archive checksum: `build/EvenBetterTouchTool-2.7.0-arm64.zip.sha256`
-- Raw local build/test log: `build/top-tabs-check.log`
+- Installable archive: `build/EvenBetterTouchTool-2.7.1-arm64.zip`
+- Archive checksum: `build/EvenBetterTouchTool-2.7.1-arm64.zip.sha256`
+- Raw local build/test log: `build/finger-labels-check.log`
 - Double-click installer: `Install.command`
 - Local installer: `install.sh` (inspect using `./install.sh --dry-run` first)
 - Uninstaller: `uninstall.sh`
@@ -175,3 +175,11 @@ All 241 checks pass. The shared navigation enum now exposes only Setup and Gestu
 The isolated disabled preview was inspected visually: no sidebar/app-name panel; centered tabs and separate master toggle; compact hand buttons with adjacent colored dots, no drawn numbers or On/Off captions, and distinct hover/accessibility descriptions. Sensitivity fields appear directly below the grid in the same Form. Toggling a row showed a disabled state and Unsaved changes; Reset restored it. Setup’s Chrome profile Edit Sensitivity shortcut selected Gestures, selected Chrome, and scrolled to Sensitivity · Google Chrome. Its inherited fields were disabled; Override enabled them and staged a change; Reset restored inheritance. No real configuration or macOS permissions were changed by preview checks. Physical gesture behavior is unchanged and no new hardware acceptance is claimed.
 
 Version 2.7.0 was installed after confirming All changes saved in the previous app. The installed executable matches the tested build, its signature verifies, and the saved configuration hash is unchanged. The installed window has two top tabs and no sidebar. Both permissions were unverified for the changed locally signed executable; only this bundle ID’s obsolete Accessibility and ListenEvent records were reset, and the final app reopened for the user to grant fresh approvals. No permission was granted automatically.
+
+## Version 2.7.1 visible finger labels
+
+The Fingers-column button label changes from a hand glyph to a rounded semibold 3 or 4. Its status dot, layout, hover description, accessibility label, rowEnabled binding, and explicit Save/Reset behavior are retained. No gesture or action implementation changes, and no new hardware acceptance is claimed.
+
+All 241 existing checks pass. The isolated disabled preview was inspected visually: 3 and 4 are clearly displayed in the Fingers column with the retained status dots, no hand icons, and correct hover/accessibility descriptions. No preview edits changed the real configuration.
+
+Version 2.7.1 is installed; its executable matches the tested build, its signature verifies, and the saved configuration hash is unchanged. Only this bundle ID’s stale Accessibility/ListenEvent entries were reset after the new locally signed executable reported both unverified; the final app was reopened for the user to approve it. No permission was granted automatically.
