@@ -3,9 +3,9 @@
 ## Artifacts
 
 - Standalone Apple Silicon application: `build/EvenBetterTouchTool.app`
-- Installable archive: `build/EvenBetterTouchTool-2.4.1-arm64.zip`
-- Archive checksum: `build/EvenBetterTouchTool-2.4.1-arm64.zip.sha256`
-- Raw local build/test log: `build/defaults-check-final.log`
+- Installable archive: `build/EvenBetterTouchTool-2.5.0-arm64.zip`
+- Archive checksum: `build/EvenBetterTouchTool-2.5.0-arm64.zip.sha256`
+- Raw local build/test log: `build/volume-swap-check.log`
 - Double-click installer: `Install.command`
 - Local installer: `install.sh` (inspect using `./install.sh --dry-run` first)
 - Uninstaller: `uninstall.sh`
@@ -19,7 +19,7 @@ Build host: Apple Silicon, macOS 26.6.2, Swift 6.3.2, Command Line Tools. Target
 `make check` completed successfully:
 
 - Native application compilation: PASS, no compiler warnings.
-- Deterministic automated core suite: **169 core + 27 app-model + 14 shortcut lifecycle tests passed, 0 failed (210 total)**.
+- Deterministic automated core suite: **177 core + 29 app-model + 14 shortcut lifecycle + 4 native indicator tests passed, 0 failed (224 total)**.
 - `--smoke-test`: PASS (default schema validation and AppKit-linked executable startup).
 - `codesign --verify --strict`: PASS.
 - App `Info.plist` validation: PASS.
@@ -135,3 +135,9 @@ The isolated disabled preview enabled Click → Play/Pause, opened and edited it
 The user confirmed 0.05 seconds (not 0.5) as the preferred Chrome left/right swipe cooldown and reported that three-finger physical click Play/Pause works on their Mac. These choices are now the defaults for fresh configurations and restored Chrome profiles; tap playback stays disabled. Finder's horizontal cooldown remains zero. Automated checks verify default/restored Chrome mappings, enabled press playback, disabled tap playback, existing saved preference preservation, and Save-only Restore Defaults behavior. Other gesture, event-encoding, and installer tests remain passing.
 
 The built/downloadable app is 2.4.1. The user's working installed 2.4.0 app is deliberately left running; neither its executable nor its saved configuration was changed, preserving existing OS approvals and working custom values. The current profile already uses 0.05 seconds in both Chrome directions and has click playback enabled. Installing the new binary later may require fresh permission approval because local ad-hoc code identities change. The user's click report is hardware feedback, not a claim that every physical acceptance test passed.
+
+## Version 2.5.0 checks
+
+Build, signature, metadata, smoke, and shell checks passed. Four native AppKit indicator tests inspect the actual panel frame while the status item expands and percentage changes from 9% to 99% to 100%, actual fade closure, revival during an existing fade without a stale close, and idle timeout plus fade. The tests use a normal macOS graphics session, temporary UI, no input injection, and no audio changes. Pure state tests cover fade revival, volume/nonvolume gesture classification, reversed native directions, mapping swaps, inherited profile values, disabled row preservation, missing cells/profiles, and Reset. App-model tests verify that swaps never write/apply before Save and persist only in the selected profile.
+
+The 2.5.0 disabled preview was opened, but computer-use visual inspection was blocked because the Mac was locked. The user was asked to unlock it manually. Grid layout, actual mouse-triggered dismissal, and a physical continuous-volume session remain manual checks; no visual pass is claimed for those. The working installation and saved configuration were not modified during build/testing. See the manual checklist before claiming hardware acceptance.

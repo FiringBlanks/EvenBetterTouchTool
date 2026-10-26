@@ -24,6 +24,8 @@ final class TrackpadDriver {
     private var stop: (@convention(c) (MTDeviceRef?) -> Void)?
     private var engine = GestureEngine(config: .defaults, app: "", device: "")
     private var lastPublish = 0.0
+    private var lastFrameReceipt = -Double.infinity
+    private var reportedOtherGesture = false
     private var lastPhysicalClick = -Double.infinity
     private var mouseButtons = Set<Int64>()
     private var generation = 0
@@ -45,8 +47,10 @@ final class TrackpadDriver {
     var onStatus: ((String) -> Void)?
     var onButtonObserver: ((Bool) -> Void)?
     var onScrollFiltering: ((Bool) -> Void)?
+    var onOtherInteraction: (() -> Void)?
     var currentGeneration: Int { queue.sync { generation } }
     var currentClickGeneration: Int { queue.sync { clickGeneration } }
+    var adjustingVolume: Bool { queue.sync { engine.adjustingVolume && ProcessInfo.processInfo.systemUptime-lastFrameReceipt < 0.12 } }
     init() { Self.current = self }
     private func symbol<T>(_ name: String, _ type: T.Type) -> T? {
         guard let library, let address = dlsym(library, name) else { return nil }
@@ -161,10 +165,16 @@ final class TrackpadDriver {
         let received = ProcessInfo.processInfo.systemUptime
         queue.async { [weak self] in
             guard let self, device == self.activeDevice else { return }
+            self.lastFrameReceipt = received
             self.press.observe(contacts,time:received,scale:self.engine.config.movementScale(for:self.engine.device))
             let tap = self.engine.config.tapOptions(fingers:contacts.count,app:self.engine.app)
             let frame = TouchFrame(time: time, contacts: contacts, physicalButton: !self.mouseButtons.isEmpty || received-self.lastPhysicalClick < tap.clickExclusion)
             let triggers = self.engine.process(frame), app = self.engine.app, generation = self.generation
+            if self.engine.trackedFingerCount == 0 { self.reportedOtherGesture = false }
+            if self.engine.hasSwipeMotion && !self.engine.adjustingVolume && !self.reportedOtherGesture {
+                self.reportedOtherGesture = true
+                DispatchQueue.main.async { [weak self] in self?.onOtherInteraction?() }
+            }
             self.scrollFilter.observe(contacts:contacts,trackedFingers:self.engine.trackedFingerCount,time:received)
             if received-self.lastPublish >= 1/20 || contacts.isEmpty {
                 self.lastPublish = received

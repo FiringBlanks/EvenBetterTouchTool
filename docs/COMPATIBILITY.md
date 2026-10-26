@@ -1,6 +1,6 @@
 # API choices and compatibility limits
 
-EvenBetterTouchTool 2.4 targets macOS 14 or later, Apple Silicon. It was compiled on macOS 26.6.2 with Swift 6.3.2, using Swift 5 language mode. Physical trackpad behavior on a 15-inch M4 MacBook Air remains a manual validation task.
+EvenBetterTouchTool 2.5 targets macOS 14 or later, Apple Silicon. It was compiled on macOS 26.6.2 with Swift 6.3.2, using Swift 5 language mode. Physical trackpad behavior on a 15-inch M4 MacBook Air remains a manual validation task.
 
 ## Contacts and physical distance
 
@@ -82,3 +82,9 @@ System shortcut events now include explicit modifier-key down/up edges and Fn/Nu
 Core Audio adjustments aggregate a frame's distance steps into one clamped write per exposed output channel. The resulting output values are read back before feedback is shown. An owned nonactivating NSPanel and the app's status item show the percentage; a single rescheduled work item hides them after two seconds without another update. Showing feedback does not activate the app or replace the foreground profile. Unsupported output devices report an error. The 42% Diagnostics preview changes no audio. Apple's Control Center Sound panel has no supported opening/closing API used here; this UI is explicitly the app's own indicator.
 
 References: [Quartz event tap creation](https://developer.apple.com/documentation/coregraphics/cgevent/tapcreate(tap:place:options:eventsofinterest:callback:userinfo:)), [Fn event flag](https://developer.apple.com/documentation/coregraphics/cgeventflags/masksecondaryfn), and [Control Center user controls](https://support.apple.com/guide/mac-help/mchlc9d0e1f2/mac).
+
+## Stable feedback and interaction fade (2.5)
+
+The volume status item reserves a fixed width while feedback is visible, and the nonactivating panel captures one position for that entire visible session. Subsequent values update the existing hosting view without reanchoring or reopening the window. A 0.20-second fade replaces abrupt dismissal. Mouse movement/drag/buttons, keyboard/modifier input, normal scrolling, magnify/rotate, app activation, and other recognized swipes/actions initiate dismissal. Local/global event monitors exist only while feedback is visible and return events unchanged. Scroll momentum/end events are continuations; active volume gestures are excluded from scroll dismissal. A new volume change resets the idle deadline and invalidates an older fade completion so it cannot hide the revived indicator.
+
+Column swaps copy complete Mapping values in the draft only. An app-specific swap resolves inherited values before exchanging them and removes an override when its resulting value matches the corresponding global cell. Global mappings, other profiles, and row toggles are unchanged. Existing native-conflict gates remain in force; swaps do not change macOS settings. Gesture-only Save remains scoped to one cell; use the main Save to commit a complete pending swap.

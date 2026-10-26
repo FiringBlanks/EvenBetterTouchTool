@@ -36,13 +36,17 @@ final class GestureEngine {
     private var maxMovement = 0.0
     private var lastFire = -Double.infinity
     private var lastTap: [Int:Double] = [:]
+    private var activeAction: ActionKind?
     var trackedFingerCount: Int { cancelled ? 0 : start.count }
+    var adjustingVolume: Bool { !cancelled && !start.isEmpty && (activeAction == .volumeUp || activeAction == .volumeDown) }
+    var hasSwipeMotion: Bool { !cancelled && axis != nil && !start.isEmpty }
     init(config: Configuration, app: String, device: String) { self.config = config; self.app = app; self.device = device }
     func cancel(_ reason: String = "Cancelled; lift all fingers") { cancelled = true; remainder = 0; snapshot.reason = reason }
     func reset(preserveTapCooldown: Bool = false) {
         start = []; releasingAt = nil; cancelled = false; clicked = false; swiped = false; singleFired = false
         axis = nil; remainder = 0; lastSign = 0; maxMovement = 0; lastFire = -.infinity; lastTime = -.infinity
         if !preserveTapCooldown { lastTap = [:] }
+        activeAction = nil
     }
     func physicalClick() { clicked = true; cancel("Physical button observed; tap cancelled") }
     func observedPress(_ fingers: Int) { snapshot.gesture = Gesture(fingers:fingers,direction:.click).title; snapshot.reason = "Physical press action; normal mouse click retained" }
@@ -130,8 +134,10 @@ final class GestureEngine {
         var m = original
         if original.reverse { m.action = config.mapping(g, app: app).action }
         snapshot.gesture = g.title
+        activeAction = nil
         if m.action.kind == .native { swiped = true }
         if let reason = config.blockedReason(g, mapping: m, device: device) { snapshot.reason = reason; remainder = 0; return [] }
+        activeAction = m.action.kind
         let distance = m.distanceMM ?? (horizontal ? sensitivity.horizontalMM : sensitivity.verticalMM)
         guard remainder + 1e-7 >= distance else { return [] }
         let continuous = m.continuous && m.action.supportsContinuous

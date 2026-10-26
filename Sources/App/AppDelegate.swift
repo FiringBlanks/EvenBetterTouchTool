@@ -38,13 +38,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         for menuItem in menu.items { menuItem.target = self }
         item.menu = menu; statusItem = item
         volumeIndicator.onVisibilityChanged = { [weak self, weak item] visible in
-            item?.length = visible ? NSStatusItem.variableLength : NSStatusItem.squareLength
+            item?.length = visible ? VolumeIndicator.statusWidth : NSStatusItem.squareLength
             self?.model.volumeIndicatorVisible = visible
         }
         model.onVolumeFeedback = { [weak self] level in
-            guard let self else { return }; self.statusItem?.length = NSStatusItem.variableLength
+            guard let self else { return }
             self.volumeIndicator.show(level,anchoredTo:self.statusItem?.button)
         }
+        volumeIndicator.isVolumeGesture = { [weak self] in self?.model.driver.adjustingVolume ?? false }
+        model.onOtherInteraction = { [weak self] in self?.volumeIndicator.dismissForInteraction() }
         installMainMenu()
         installEmergencyHotkey()
         if !preview { model.start() }

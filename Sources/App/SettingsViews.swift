@@ -160,13 +160,25 @@ struct GestureGrid: View {
                     Text("Global").tag("")
                     ForEach(model.config.profiles) { p in Text(p.name).tag(p.bundleID) }
                 }.pickerStyle(.menu)
-                Text("Click a gesture to edit it. Click a hand to enable or disable its row.").font(.callout).foregroundStyle(.secondary)
+                Text("Click a cell to edit, a hand to toggle a row, or ↕ to swap a column.").font(.callout).foregroundStyle(.secondary)
                 Grid(horizontalSpacing: 8, verticalSpacing: 12) {
                     GridRow { Text("Fingers").font(.caption); ForEach(Direction.allCases, id: \.self) { Text($0.title).font(.caption.weight(.semibold)).frame(maxWidth: .infinity) } }
                     ForEach([3,4], id: \.self) { fingers in
                         GridRow {
                             rowToggle(fingers)
                             ForEach(Direction.allCases, id: \.self) { d in cell(Gesture(fingers: fingers, direction: d)) }
+                        }
+                        if fingers == 3 {
+                            GridRow {
+                                Text("Swap").font(.caption2).foregroundStyle(.secondary)
+                                ForEach(Direction.allCases,id:\.self) { direction in
+                                    Button { model.swapRows(direction) } label: {
+                                        Image(systemName:"arrow.up.arrow.down").font(.system(size:12,weight:.medium)).frame(width:24,height:22)
+                                    }.buttonStyle(.borderless).controlSize(.small).frame(maxWidth:.infinity)
+                                        .accessibilityLabel("Swap three- and four-finger \(direction.title) mappings")
+                                        .help("Swap \(direction.title) settings between three and four fingers. Click Save to apply.")
+                                }
+                            }
                         }
                     }
                 }

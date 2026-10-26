@@ -205,6 +205,21 @@ import CoreGraphics
             try expect(try Data(contentsOf:url)==before)
             model.resetEdits(); try expect(model.config.mappings["3_click"]?.enabled==false)
         }
+        test("Column swap stays pending until Save and Reset restores it") { model,url in
+            let before=try Data(contentsOf:url), saved=model.savedConfig
+            model.swapRows(.up)
+            try expect(model.hasPendingChanges && model.savedConfig==saved && (try Data(contentsOf:url))==before)
+            model.resetEdits(); try expect(!model.hasPendingChanges && model.config==saved)
+            model.swapRows(.up); let expected=model.config
+            try expect(model.save() && (try ConfigurationStore(url:url).load()).mappings==expected.mappings)
+        }
+        test("Profile column swap saves only to that profile") { model,url in
+            let globals=model.savedConfig.mappings; model.selectedProfile="com.google.Chrome"; model.swapRows(.down)
+            let expected=model.config.profiles[0].mappings
+            try expect(model.hasPendingChanges && model.save())
+            let saved=try ConfigurationStore(url:url).load()
+            try expect(saved.mappings==globals && saved.profiles[0].mappings==expected)
+        }
         print("\n\(passed) model tests passed; \(failed) failed")
         if failed > 0 { exit(1) }
     }

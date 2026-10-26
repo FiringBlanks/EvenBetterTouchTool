@@ -66,4 +66,20 @@ struct SettingsDraft: Equatable {
             config.profiles[i].rowEnabled?[key] = value
         }
     }
+    /// Swap complete cell settings. App profiles swap their effective values,
+    /// creating overrides only where the result differs from the global cell.
+    /// Row enabled switches remain attached to their finger counts.
+    mutating func swapRows(direction: Direction, profileID: String) {
+        let three = Gesture(fingers:3,direction:direction), four = Gesture(fingers:4,direction:direction)
+        if profileID.isEmpty {
+            let first = config.mappings[three.id], second = config.mappings[four.id]
+            config.mappings[three.id] = second; config.mappings[four.id] = first
+        } else if let i = config.profiles.firstIndex(where: { $0.bundleID == profileID }) {
+            let first = mapping(three,profileID:profileID), second = mapping(four,profileID:profileID)
+            let globalThree = config.mappings[three.id] ?? Mapping(enabled:false)
+            let globalFour = config.mappings[four.id] ?? Mapping(enabled:false)
+            config.profiles[i].mappings[three.id] = second == globalThree ? nil : second
+            config.profiles[i].mappings[four.id] = first == globalFour ? nil : first
+        }
+    }
 }

@@ -38,10 +38,15 @@ build/AppModelTests: $(CORE) Sources/App/AppModel.swift Sources/App/ActionExecut
 	mkdir -p build/module-cache
 	$(SWIFTC) $(SWIFTFLAGS) -import-objc-header mt.h $(CORE) Sources/App/AppModel.swift Sources/App/ActionExecutor.swift Sources/App/TrackpadDriver.swift Tests/AppModelTests.swift -o $@
 
-test: build/CoreTests build/AppModelTests build/LauncherTests
+build/VolumeIndicatorTests: Sources/Core/VolumePresentation.swift Sources/App/VolumeIndicator.swift Tests/VolumeIndicatorTests.swift
+	mkdir -p build/module-cache
+	$(SWIFTC) $(SWIFTFLAGS) Sources/Core/VolumePresentation.swift Sources/App/VolumeIndicator.swift Tests/VolumeIndicatorTests.swift -o $@
+
+test: build/CoreTests build/AppModelTests build/LauncherTests build/VolumeIndicatorTests
 	./build/CoreTests
 	./build/AppModelTests
 	./build/LauncherTests
+	./build/VolumeIndicatorTests
 
 check: all test
 	$(APP)/Contents/MacOS/EvenBetterTouchTool --smoke-test
