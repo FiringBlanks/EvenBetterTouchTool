@@ -52,45 +52,34 @@ struct PermissionControls: View {
 struct SettingsRoot: View {
     @ObservedObject var model: AppModel
     var body: some View {
-        NavigationSplitView {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("EvenBetterTouchTool", systemImage: "hand.draw.fill").font(.headline).lineLimit(1).minimumScaleFactor(0.8).padding([.top,.horizontal],16)
-                List(selection: $model.section) {
-                    ForEach(SettingsSection.allCases) { section in Label(section.rawValue, systemImage: section.symbol).tag(section.rawValue).padding(.vertical,5) }
-                }.listStyle(.sidebar)
-                Text("⌃⌥⌘ Esc · Emergency disable").font(.caption2).foregroundStyle(.secondary).padding(16)
-            }.navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 250)
-        } detail: {
-            VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment:.leading,spacing:0) {
+            ZStack {
+                Picker("Settings tabs",selection:$model.section) {
+                    ForEach(SettingsSection.allCases) { section in Text(section.rawValue).tag(section.rawValue) }
+                }.pickerStyle(.segmented).labelsHidden().controlSize(.large).frame(width:260)
                 HStack {
-                    Text(model.section).font(.largeTitle.bold())
                     Spacer()
-                    Toggle(model.config.enabled ? "Enabled" : "Disabled", isOn: $model.config.enabled).toggleStyle(PersistentBlueSwitchStyle()).accessibilityLabel("Enable gesture engine")
-                }.padding(24)
-                Divider()
-                if !model.message.isEmpty {
-                    HStack { Image(systemName:"exclamationmark.triangle"); Text(model.message).font(.caption); Spacer(); Button("Dismiss") { model.message = "" } }.padding(12).background(.orange.opacity(0.12))
+                    Toggle(model.config.enabled ? "Enabled":"Disabled",isOn:$model.config.enabled)
+                        .toggleStyle(PersistentBlueSwitchStyle()).accessibilityLabel("Enable gesture engine")
                 }
-                detail
-                Divider()
-                HStack(spacing: 12) {
-                    Text(model.editing.externalConflict ? "External changes — Reset to review" : model.hasPendingChanges ? "Unsaved changes" : model.runtimePaused ? "Emergency pause active" : "All changes saved")
-                        .font(.caption).foregroundStyle(model.hasPendingChanges || model.editing.externalConflict ? .orange : .secondary)
-                    Spacer()
-                    Button("Reset") { model.resetEdits() }.disabled(!model.hasPendingChanges && !model.editing.externalConflict)
-                    Button("Save") { NSApp.keyWindow?.makeFirstResponder(nil); DispatchQueue.main.async { model.save() } }
-                        .buttonStyle(.borderedProminent).disabled(!model.canSave || model.calibrationAxis != nil)
-                        .keyboardShortcut("s", modifiers: .command)
-                }.padding(.horizontal, 24).padding(.vertical, 14)
-            }.background(Color(nsColor: .windowBackgroundColor))
-        }.frame(minWidth: 940, minHeight: 660)
-    }
-    @ViewBuilder private var detail: some View {
-        switch model.section {
-        case SettingsSection.gestures.rawValue: GestureGrid(model: model)
-        case SettingsSection.sensitivity.rawValue: SensitivitySettingsView(model: model)
-        default: SetupSettingsView(model: model)
-        }
+            }.frame(height:36).padding(.horizontal,24).padding(.vertical,14)
+            Divider()
+            if !model.message.isEmpty {
+                HStack { Image(systemName:"exclamationmark.triangle"); Text(model.message).font(.caption); Spacer(); Button("Dismiss") { model.message="" } }.padding(12).background(.orange.opacity(0.12))
+            }
+            if model.section == SettingsSection.gestures.rawValue { GestureGrid(model:model) }
+            else { SetupSettingsView(model:model) }
+            Divider()
+            HStack(spacing:12) {
+                Text(model.editing.externalConflict ? "External changes — Reset to review":model.hasPendingChanges ? "Unsaved changes":model.runtimePaused ? "Emergency pause active":"All changes saved")
+                    .font(.caption).foregroundStyle(model.hasPendingChanges || model.editing.externalConflict ? .orange:.secondary)
+                Spacer()
+                Text("⌃⌥⌘ Esc").font(.caption).foregroundStyle(.secondary).help("Emergency disable: pause custom gestures immediately")
+                Button("Reset") { model.resetEdits() }.disabled(!model.hasPendingChanges && !model.editing.externalConflict)
+                Button("Save") { NSApp.keyWindow?.makeFirstResponder(nil); DispatchQueue.main.async { model.save() } }
+                    .buttonStyle(.borderedProminent).disabled(!model.canSave || model.calibrationAxis != nil).keyboardShortcut("s",modifiers:.command)
+            }.padding(.horizontal,24).padding(.vertical,14)
+        }.background(Color(nsColor:.windowBackgroundColor)).frame(minWidth:940,minHeight:660)
     }
 }
 
@@ -98,51 +87,68 @@ struct GestureGrid: View {
     @ObservedObject var model: AppModel
     @State private var selected: Gesture?
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Picker("Configuration", selection: $model.selectedProfile) {
-                    Text("Global").tag("")
-                    ForEach(model.config.profiles) { p in Text(p.name).tag(p.bundleID) }
-                }.pickerStyle(.menu)
-                Text("Click a cell to edit, a hand to toggle a row, or ↕ to swap a column.").font(.callout).foregroundStyle(.secondary)
-                Grid(horizontalSpacing: 8, verticalSpacing: 12) {
-                    GridRow { Text("Fingers").font(.caption); ForEach(Direction.allCases, id: \.self) { Text($0.title).font(.caption.weight(.semibold)).frame(maxWidth: .infinity) } }
-                    ForEach([3,4], id: \.self) { fingers in
-                        GridRow {
-                            rowToggle(fingers)
-                            ForEach(Direction.allCases, id: \.self) { d in cell(Gesture(fingers: fingers, direction: d)) }
-                        }
-                        if fingers == 3 {
-                            GridRow {
-                                Text("Swap").font(.caption2).foregroundStyle(.secondary)
-                                ForEach(Direction.allCases,id:\.self) { direction in
-                                    Button { model.swapRows(direction) } label: {
-                                        Image(systemName:"arrow.up.arrow.down").font(.system(size:12,weight:.medium)).frame(width:24,height:22)
-                                    }.buttonStyle(.borderless).controlSize(.small).frame(maxWidth:.infinity)
-                                        .accessibilityLabel("Swap three- and four-finger \(direction.title) mappings")
-                                        .help("Swap \(direction.title) settings between three and four fingers. Click Save to apply.")
+        ScrollViewReader { proxy in
+            Form {
+                Section {
+                    Picker("Configuration",selection:$model.selectedProfile) {
+                        Text("Global").tag("")
+                        ForEach(model.config.profiles) { p in Text(p.name).tag(p.bundleID) }
+                    }.pickerStyle(.menu)
+                }.id(GestureTarget.grid)
+                Section {
+                    VStack(alignment:.leading,spacing:18) {
+                        Grid(horizontalSpacing:8,verticalSpacing:12) {
+                            GridRow { Text("Fingers").font(.caption); ForEach(Direction.allCases,id:\.self) { Text($0.title).font(.caption.weight(.semibold)).frame(maxWidth:.infinity) } }
+                            ForEach([3,4],id:\.self) { fingers in
+                                GridRow { rowToggle(fingers); ForEach(Direction.allCases,id:\.self) { direction in cell(Gesture(fingers:fingers,direction:direction)) } }
+                                if fingers == 3 {
+                                    GridRow {
+                                        Text("Swap").font(.caption2).foregroundStyle(.secondary)
+                                        ForEach(Direction.allCases,id:\.self) { direction in
+                                            Button { model.swapRows(direction) } label: { Image(systemName:"arrow.up.arrow.down").font(.system(size:12,weight:.medium)).frame(width:24,height:22) }
+                                                .buttonStyle(.borderless).controlSize(.small).frame(maxWidth:.infinity)
+                                                .accessibilityLabel("Swap three- and four-finger \(direction.title) mappings")
+                                                .help("Swap \(direction.title) settings between three and four fingers. Click Save to apply.")
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
+                        Label("Physical press actions also perform the normal mouse click. Native pass-through is unaffected by row switches.",systemImage:"info.circle").font(.caption).foregroundStyle(.secondary)
+                    }.padding(.vertical,6)
                 }
-                Label("Physical press actions also perform the normal mouse click. Native pass-through is unaffected by row switches.", systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
-            }.padding(24)
-        }.popover(item: $selected, arrowEdge: .bottom) { g in
-            MappingEditor(model: model, gesture: g, profileID: model.selectedProfile).frame(width: 600, height: 620)
+                sensitivity
+            }.formStyle(.grouped)
+                .onAppear { scroll(using:proxy) }
+                .onChange(of:model.gestureNavigationRevision) { _,_ in scroll(using:proxy) }
+        }.popover(item:$selected,arrowEdge:.bottom) { gesture in
+            MappingEditor(model:model,gesture:gesture,profileID:model.selectedProfile).frame(width:600,height:620)
         }
+    }
+    @ViewBuilder private var sensitivity:some View {
+        if let i=model.config.profiles.firstIndex(where:{$0.bundleID==model.selectedProfile}) {
+            SensitivityControls(value:Binding(get:{model.config.profiles[i].sensitivity ?? model.config.sensitivity},set:{model.config.profiles[i].sensitivity=$0}),unit:model.distanceUnit,
+                title:"Sensitivity · \(model.config.profiles[i].name)",
+                overrideGlobal:Binding(get:{model.config.profiles[i].sensitivity != nil},set:{model.config.profiles[i].sensitivity=$0 ? model.config.sensitivity:nil}),
+                inherited:model.config.profiles[i].sensitivity == nil)
+        } else { SensitivityControls(value:$model.config.sensitivity,unit:model.distanceUnit) }
+    }
+    private func scroll(using proxy:ScrollViewProxy) {
+        DispatchQueue.main.async { withAnimation(.easeInOut(duration:0.2)) { proxy.scrollTo(model.gestureTarget,anchor:.top) } }
     }
     private func rowToggle(_ fingers: Int) -> some View {
         let enabled = model.rowEnabled(fingers)
         return Button { model.toggleRow(fingers) } label: {
-            VStack(spacing: 6) {
-                Image(systemName: enabled ? "hand.draw.fill" : "hand.draw").font(.title2)
-                Text("\(fingers)").font(.title.bold())
-                HStack(spacing: 3) { Circle().frame(width: 5, height: 5); Text(enabled ? "On" : "Off").font(.caption2) }
-            }.foregroundStyle(enabled ? Color.accentColor : Color.secondary).frame(width: 52, height: 116)
-                .background(enabled ? Color.accentColor.opacity(0.08) : Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
-        }.buttonStyle(.plain).accessibilityLabel("\(fingers)-finger row: \(enabled ? "Enabled" : "Disabled")")
-            .help("\(enabled ? "Disable" : "Enable") all \(fingers)-finger custom gestures. Click Save to apply.")
+            HStack(spacing:8) {
+                Circle().fill(enabled ? Color.accentColor:Color.secondary.opacity(0.35)).frame(width:6,height:6)
+                Image(systemName:"hand.draw").font(.system(size:19,weight:.medium))
+                    .foregroundStyle(enabled ? Color.primary:Color.secondary)
+                    .frame(width:36,height:40).background(Color.secondary.opacity(enabled ? 0.08:0.04),in:RoundedRectangle(cornerRadius:9))
+                    .opacity(enabled ? 1:0.5)
+            }.frame(width:52,height:44).contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityLabel("\(fingers)-finger row: \(enabled ? "Enabled":"Disabled")")
+            .accessibilityValue(enabled ? "Enabled":"Disabled")
+            .help("\(fingers)-finger gestures. \(enabled ? "Disable":"Enable") this entire row; click Save to apply.")
     }
     private func cell(_ g: Gesture) -> some View {
         let m = model.mapping(g), rowEnabled = model.rowEnabled(g.fingers)
@@ -374,24 +380,30 @@ struct PressControls: View {
 struct SensitivityControls: View {
     @Binding var value: Sensitivity
     var unit: String
+    var title = "Sensitivity"
+    var overrideGlobal: Binding<Bool>? = nil
+    var inherited = false
     var body: some View {
-        Section("Continuous movement") {
-            Text(unit == "mm" ? "Measured distance on the selected trackpad." : "No calibration needed. Distances are percentages of the trackpad’s width or height.").font(.caption).foregroundStyle(.secondary)
-            NumericSlider(title:"Horizontal interval",value:$value.horizontalMM,range:0.5...20,unit:unit)
-            NumericSlider(title:"Vertical interval",value:$value.verticalMM,range:0.5...20,unit:unit)
-            NumericSlider(title:"Volume step",value:$value.volumePercent,range:0.1...20,unit:"%")
-        }
+        Section(title) {
+            if let overrideGlobal { Toggle("Override global sensitivity",isOn:overrideGlobal) }
+            Group {
+                Text(unit == "mm" ? "Measured distance on the selected trackpad." : "No calibration needed. Distances are percentages of the trackpad’s width or height.").font(.caption).foregroundStyle(.secondary)
+                NumericSlider(title:"Horizontal interval",value:$value.horizontalMM,range:0.5...20,unit:unit)
+                NumericSlider(title:"Vertical interval",value:$value.verticalMM,range:0.5...20,unit:unit)
+                NumericSlider(title:"Volume step",value:$value.volumePercent,range:0.1...20,unit:"%")
+            }.disabled(inherited)
+        }.id(GestureTarget.sensitivity)
         Section("Taps") {
             TapControls(value:$value.effectiveTapOptions,unit:unit)
-        }
+        }.disabled(inherited)
         Section("Physical presses") {
             PressControls(value:$value.effectiveClickOptions,unit:unit)
-        }
+        }.disabled(inherited)
         Section("Recognition") {
             NumericSlider(title:"Swipe activation",value:$value.activationMM,range:0.1...10,unit:unit)
             NumericSlider(title:"Diagonal rejection",value:$value.diagonalRatio,range:1.05...4,unit:"×")
             NumericSlider(title:"Jitter tolerance",value:$value.jitterMM,range:0...0.5,unit:unit)
-        }
+        }.disabled(inherited)
     }
 }
 struct TrackpadCanvas: View {

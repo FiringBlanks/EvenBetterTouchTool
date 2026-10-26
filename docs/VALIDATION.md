@@ -3,9 +3,9 @@
 ## Artifacts
 
 - Standalone Apple Silicon application: `build/EvenBetterTouchTool.app`
-- Installable archive: `build/EvenBetterTouchTool-2.6.0-arm64.zip`
-- Archive checksum: `build/EvenBetterTouchTool-2.6.0-arm64.zip.sha256`
-- Raw local build/test log: `build/setup-layout-check.log`
+- Installable archive: `build/EvenBetterTouchTool-2.7.0-arm64.zip`
+- Archive checksum: `build/EvenBetterTouchTool-2.7.0-arm64.zip.sha256`
+- Raw local build/test log: `build/top-tabs-check.log`
 - Double-click installer: `Install.command`
 - Local installer: `install.sh` (inspect using `./install.sh --dry-run` first)
 - Uninstaller: `uninstall.sh`
@@ -19,7 +19,7 @@ Build host: Apple Silicon, macOS 26.6.2, Swift 6.3.2, Command Line Tools. Target
 `make check` completed successfully:
 
 - Native application compilation: PASS, no compiler warnings.
-- Deterministic automated core suite: **187 core + 34 app-model + 14 shortcut lifecycle + 5 native indicator tests passed, 0 failed (240 total)**.
+- Deterministic automated core suite: **187 core + 35 app-model + 14 shortcut lifecycle + 5 native indicator tests passed, 0 failed (241 total)**.
 - `--smoke-test`: PASS (default schema validation and AppKit-linked executable startup).
 - `codesign --verify --strict`: PASS.
 - App `Info.plist` validation: PASS.
@@ -167,3 +167,11 @@ The app compiles with three shared navigation destinations: Setup, Gestures, and
 An isolated disabled preview confirmed the three-tab sidebar, permissions first, default Setup selection, native Settings menu with matching tabs, the trackpad shortcut expanding and scrolling to Advanced calibration, and profile sensitivity selection. Chrome’s inherited sensitivity was read-only; enabling its override showed Unsaved changes and Reset restored the saved state. Full-row clicks were confirmed on Advanced and its nested Diagnostics control. Diagnostics expanded inside Setup and exposed recognition status, test actions, volume preview, logging and recovery-related tools. The final disclosure style is also applied to nested groups. The real configuration was not used for preview edits.
 
 Version 2.6.0 was installed after verifying All changes saved in the prior app. The installed executable matches the tested build and the saved configuration hash is unchanged. The installed UI selects Setup, shows Permissions first, uses the friendly trackpad name, and has Advanced collapsed. Both permissions were initially unverified for the changed local executable; only this bundle ID’s obsolete Accessibility and ListenEvent entries were reset, and the app reopened for fresh user approval. No permission was granted automatically.
+
+## Version 2.7.0 two-tab layout
+
+All 241 checks pass. The shared navigation enum now exposes only Setup and Gestures, matching the centered top segmented tabs and native Settings menu. New regression coverage confirms that a profile sensitivity shortcut opens Gestures at its sensitivity target, keeps the selected profile, preserves drafts, and never writes settings. Existing row toggles, profile overrides, persistence, gestures, audio/event plans, installer and native panel checks still pass.
+
+The isolated disabled preview was inspected visually: no sidebar/app-name panel; centered tabs and separate master toggle; compact hand buttons with adjacent colored dots, no drawn numbers or On/Off captions, and distinct hover/accessibility descriptions. Sensitivity fields appear directly below the grid in the same Form. Toggling a row showed a disabled state and Unsaved changes; Reset restored it. Setup’s Chrome profile Edit Sensitivity shortcut selected Gestures, selected Chrome, and scrolled to Sensitivity · Google Chrome. Its inherited fields were disabled; Override enabled them and staged a change; Reset restored inheritance. No real configuration or macOS permissions were changed by preview checks. Physical gesture behavior is unchanged and no new hardware acceptance is claimed.
+
+Version 2.7.0 was installed after confirming All changes saved in the previous app. The installed executable matches the tested build, its signature verifies, and the saved configuration hash is unchanged. The installed window has two top tabs and no sidebar. Both permissions were unverified for the changed locally signed executable; only this bundle ID’s obsolete Accessibility and ListenEvent records were reset, and the final app reopened for the user to grant fresh approvals. No permission was granted automatically.

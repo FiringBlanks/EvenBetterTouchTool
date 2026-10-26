@@ -1,10 +1,9 @@
-# EvenBetterTouchTool 2.6.0 — Consolidated Setup
+# EvenBetterTouchTool 2.7.0 — Two centered tabs
 
-- Setup is the first, default-selected tab. Gestures and Sensitivity are the only other sidebar tabs; the native Settings menu matches.
-- Permissions have their own section at the very top. Trackpad selection, startup, native gesture setup, application profiles, and import/export follow.
-- One collapsed Advanced section at the bottom contains calibration and live contact testing, system shortcuts, diagnostics, configuration files, and recovery. Disclosure rows are clickable across their labels. The menu-bar Diagnostics shortcut opens the correct Setup destination.
-- Application sensitivity overrides live in the Sensitivity tab beside a global/application selector. Inherited settings remain read-only until overridden.
-- Promotional taglines and page subtitles are removed. Permission checks, master enable, contact displays, version information, and recovery controls are consolidated instead of repeated.
-- Existing gesture mappings and Save/Reset behavior are preserved. Navigation and disclosure changes do not save settings.
+- Setup and Gestures are the only tabs, horizontally centered at the top. The left pane and its app-name heading are removed; the enable switch stays at the right.
+- All sensitivity controls follow the gesture grid in one scrollable Gestures page, sharing its Global/application selection. App sensitivity overrides remain explicit and require Save.
+- Three-/four-finger row switches are compact hand buttons with a small colored dot to the left. Visible numbers and On/Off captions are removed; hover help and screen-reader labels identify the finger count and state.
+- Profile Edit Sensitivity and calibration Adjust Sensitivity shortcuts navigate and scroll to the merged controls. The emergency shortcut remains visible in the footer.
+- Saved mappings, thresholds, profiles, and Save/Reset behavior are preserved.
 
-The complete build/check suite passes (240 checks: 187 core, 34 app-model, 14 installer, five native panel checks). An isolated disabled preview is used for layout and navigation checks; no physical gesture acceptance is claimed for a UI reorganization. Local ad-hoc updates may require fresh Accessibility and Input Monitoring approval.
+All 241 checks pass (187 core, 35 app-model, 14 installer, five native panel checks). The isolated disabled preview verified layout, row toggle/Reset, profile sensitivity navigation, inherited fields, override staging, and Reset. No physical gesture behavior changed. Locally ad-hoc signed updates may require fresh Accessibility and Input Monitoring approval.

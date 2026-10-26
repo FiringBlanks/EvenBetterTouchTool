@@ -7,15 +7,13 @@ struct InstalledApplication: Identifiable {
     var id: String; var name: String; var url: URL
 }
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case setup = "Setup", gestures = "Gestures", sensitivity = "Sensitivity"
+    case setup = "Setup", gestures = "Gestures"
     var id:String { rawValue }
-    var symbol:String {
-        switch self { case .setup:return "gearshape"; case .gestures:return "hand.draw"; case .sensitivity:return "slider.horizontal.3" }
-    }
 }
 enum SetupTarget: Hashable { case permissions, applications, advanced, calibration, shortcuts, diagnostics }
+enum GestureTarget: Hashable { case grid, sensitivity }
 final class AppModel: ObservableObject {
-    static let version = "2.6.0"
+    static let version = "2.7.0"
     private(set) var settingsVisible = false
     var distanceUnit: String { config.movementScale(for: activeDevice).unit }
     var savedDistanceUnit: String { savedConfig.movementScale(for: activeDevice).unit }
@@ -50,6 +48,13 @@ final class AppModel: ObservableObject {
     @Published var showCalibrationSetup = false
     @Published var showShortcutSetup = false
     @Published var showDiagnosticsSetup = false
+    @Published var gestureTarget = GestureTarget.grid
+    @Published var gestureNavigationRevision = 0
+    func showGestures(_ target:GestureTarget = .grid,profileID:String? = nil) {
+        if let profileID { selectedProfile=profileID }
+        section=SettingsSection.gestures.rawValue
+        gestureTarget=target; gestureNavigationRevision += 1
+    }
     func showSetup(_ target:SetupTarget = .permissions) {
         section=SettingsSection.setup.rawValue
         if [.advanced,.calibration,.shortcuts,.diagnostics].contains(target) { showAdvancedSetup=true }

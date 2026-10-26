@@ -93,6 +93,8 @@ Column swaps copy complete Mapping values in the draft only. An app-specific swa
 
 The volume fill is a SwiftUI capsule whose width reflects the latest actual level directly, with animations disabled in its update transaction. The former native ProgressView interpolation is removed; presentation fade remains separate. Assigned action uses five category submenus for the same full action library on every gesture; the four-finger click has no reduced action set.
 
-## Consolidated settings (2.6)
+## Consolidated settings (2.7)
 
-Setup is the first and initially selected tab; Gestures and Sensitivity are the only other tabs. Permission controls are rendered once, first. Startup, native gesture confirmations, profiles and import/export remain available in Setup. Technical device identifiers, calibration, shortcut fallbacks, diagnostics, raw configuration and recovery are in Advanced. The menu-bar Diagnostics shortcut routes into that section, not a hidden legacy tab. No gesture or persistence behavior changes.
+Setup and Gestures are the only tabs, horizontally centered at the top; Setup is initially selected. Gestures includes all sensitivity fields beneath the grid, using its shared application selector. The sidebar and its app-name header are removed. Permission controls are rendered once, first. Startup, native gesture confirmations, profiles and import/export remain available in Setup. Technical device identifiers, calibration, shortcut fallbacks, diagnostics, raw configuration and recovery are in Advanced. The menu-bar Diagnostics shortcut routes into that section, not a hidden legacy tab. No gesture or persistence behavior changes.
+
+Compact row controls use one small hand button and a blue/gray dot. Hover help and accessibility labels identify finger count and state; visible numeric and On/Off captions are omitted. They still edit the same rowEnabled draft settings. Sensitivity shortcuts use transient navigation targets to scroll within Gestures and never save settings.

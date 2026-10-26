@@ -17,7 +17,7 @@ import CoreGraphics
     }
     static func main() throws {
         test("Setup is the default first tab with advanced tools collapsed") { model,_ in
-            try expect(SettingsSection.allCases.map(\.rawValue)==["Setup","Gestures","Sensitivity"])
+            try expect(SettingsSection.allCases.map(\.rawValue)==["Setup","Gestures"])
             try expect(model.section=="Setup" && model.setupTarget == .permissions && !model.showAdvancedSetup)
         }
         test("Diagnostics shortcut opens the consolidated advanced destination without saving") { model,url in
@@ -37,6 +37,15 @@ import CoreGraphics
             model.showSetup(.shortcuts)
             try expect(model.showShortcutSetup && model.setupTarget == .shortcuts && model.hasPendingChanges)
             model.resetEdits(); try expect(!model.hasPendingChanges && (try Data(contentsOf:url))==before)
+        }
+        test("Profile sensitivity navigation opens Gestures without saving or losing drafts") { model,url in
+            let before=try Data(contentsOf:url)
+            model.config.profiles[0].enabled=false
+            model.showGestures(.sensitivity,profileID:"com.google.Chrome")
+            try expect(model.section=="Gestures" && model.gestureTarget == .sensitivity && model.selectedProfile=="com.google.Chrome")
+            try expect(model.hasPendingChanges && model.savedConfig.profiles[0].enabled && (try Data(contentsOf:url))==before)
+            let revision=model.gestureNavigationRevision; model.showGestures(profileID:"com.apple.finder")
+            try expect(model.gestureTarget == .grid && model.selectedProfile=="com.apple.finder" && model.gestureNavigationRevision==revision+1)
         }
         test("Editing and waiting do not autosave") { model, url in
             let before = try Data(contentsOf: url)

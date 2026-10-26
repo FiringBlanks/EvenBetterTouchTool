@@ -138,9 +138,9 @@ struct SetupSettingsView: View {
                     Text(profile.name).fontWeight(.medium)
                     Spacer()
                     Toggle("Enabled",isOn:$model.config.profiles[i].enabled).labelsHidden().accessibilityLabel("Enable \(profile.name) profile")
-                    Button("Gestures") { model.selectedProfile=profile.bundleID; model.section="Gestures" }.accessibilityLabel("Edit \(profile.name) gestures")
+                    Button("Gestures") { model.showGestures(profileID:profile.bundleID) }.accessibilityLabel("Edit \(profile.name) gestures")
                     Menu {
-                        Button("Edit Sensitivity…") { model.selectedProfile=profile.bundleID; model.section="Sensitivity" }
+                        Button("Edit Sensitivity…") { model.showGestures(.sensitivity,profileID:profile.bundleID) }
                         Button("Restore App Defaults") { model.config.profiles[i]=Configuration.defaultProfile(profile.bundleID,name:profile.name) }
                         Divider()
                         Button("Remove Profile",role:.destructive) { model.config.profiles.remove(at:i); if model.selectedProfile==profile.bundleID { model.selectedProfile="" } }
@@ -171,21 +171,6 @@ struct SetupSettingsView: View {
     }
 }
 
-struct SensitivitySettingsView: View {
-    @ObservedObject var model:AppModel
-    var body:some View {
-        Form {
-            Section {
-                Picker("Configuration",selection:$model.selectedProfile) { Text("Global").tag(""); ForEach(model.config.profiles) { Text($0.name).tag($0.bundleID) } }
-            }
-            if let i=model.config.profiles.firstIndex(where:{$0.bundleID==model.selectedProfile}) {
-                Section { Toggle("Override global sensitivity",isOn:Binding(get:{model.config.profiles[i].sensitivity != nil},set:{model.config.profiles[i].sensitivity=$0 ? model.config.sensitivity:nil})) }
-                SensitivityControls(value:Binding(get:{model.config.profiles[i].sensitivity ?? model.config.sensitivity},set:{model.config.profiles[i].sensitivity=$0}),unit:model.distanceUnit).disabled(model.config.profiles[i].sensitivity == nil)
-            } else { SensitivityControls(value:$model.config.sensitivity,unit:model.distanceUnit) }
-        }.formStyle(.grouped)
-    }
-}
-
 struct TrackpadSetupFields:View {
     @ObservedObject var model:AppModel
     @State private var distance=30.0
@@ -205,7 +190,7 @@ struct TrackpadSetupFields:View {
             LabeledContent("Touching fingers",value:String(model.snapshot.fingers))
             LabeledContent("Movement",value:"X \(model.snapshot.dxMM.formatted(.number.precision(.fractionLength(3)))) \(model.savedDistanceUnit) · Y \(model.snapshot.dyMM.formatted(.number.precision(.fractionLength(3)))) \(model.savedDistanceUnit)")
             Text(calibration.wrappedValue.valid ? "Using measured millimeters." : "Calibration is optional. Sensitivity uses percentages of each trackpad axis until measured.").font(.callout).foregroundStyle(.secondary)
-            Button("Adjust Sensitivity") { model.section="Sensitivity" }
+            Button("Adjust Sensitivity") { model.showGestures(.sensitivity) }
             DisclosureGroup("Contact coordinates") {
                 ForEach(model.snapshot.contacts,id:\.id) { c in Text("#\(c.id): x=\(c.x.formatted(.number.precision(.fractionLength(4))))  y=\(c.y.formatted(.number.precision(.fractionLength(4))))").font(.system(.caption,design:.monospaced)) }
             }
