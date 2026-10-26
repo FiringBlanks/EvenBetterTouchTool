@@ -3,9 +3,9 @@
 ## Artifacts
 
 - Standalone Apple Silicon application: `build/EvenBetterTouchTool.app`
-- Installable archive: `build/EvenBetterTouchTool-2.5.2-arm64.zip`
-- Archive checksum: `build/EvenBetterTouchTool-2.5.2-arm64.zip.sha256`
-- Raw local build/test log: `build/pointer-dismissal-check.log`
+- Installable archive: `build/EvenBetterTouchTool-2.6.0-arm64.zip`
+- Archive checksum: `build/EvenBetterTouchTool-2.6.0-arm64.zip.sha256`
+- Raw local build/test log: `build/setup-layout-check.log`
 - Double-click installer: `Install.command`
 - Local installer: `install.sh` (inspect using `./install.sh --dry-run` first)
 - Uninstaller: `uninstall.sh`
@@ -19,7 +19,7 @@ Build host: Apple Silicon, macOS 26.6.2, Swift 6.3.2, Command Line Tools. Target
 `make check` completed successfully:
 
 - Native application compilation: PASS, no compiler warnings.
-- Deterministic automated core suite: **187 core + 31 app-model + 14 shortcut lifecycle + 5 native indicator tests passed, 0 failed (237 total)**.
+- Deterministic automated core suite: **187 core + 34 app-model + 14 shortcut lifecycle + 5 native indicator tests passed, 0 failed (240 total)**.
 - `--smoke-test`: PASS (default schema validation and AppKit-linked executable startup).
 - `codesign --verify --strict`: PASS.
 - App `Info.plist` validation: PASS.
@@ -159,3 +159,11 @@ A separate read-only probe confirmed the private OSDManager selectors on the hos
 The isolated disabled preview showed feedback as Visible after Preview Volume Indicator. Repeating the preview and pressing Tab left it Visible. The real installed app was checked for All changes saved before updating; no preview edit touched the real configuration.
 
 Version 2.5.2 is installed. Its executable matches the tested build, signature verification passes, and the saved configuration hash is unchanged. Both permissions were unverified for the new locally signed executable; only this bundle ID’s obsolete Accessibility/ListenEvent entries were cleared, and the app reopened for the user to approve the final build. No permission was granted automatically.
+
+## Version 2.6.0 consolidated Setup
+
+The app compiles with three shared navigation destinations: Setup, Gestures, and Sensitivity. Setup is first and selected by default; Advanced starts collapsed. The six former pages are reorganized into one Form with one permission section first and technical tools at the bottom. Taglines and page subtitles are removed. New AppModel navigation tests confirm that diagnostics/calibration/shortcut destinations open within Setup and never apply or persist drafts, including repeated navigation to the same target. The existing gesture, input, volume, persistence and installer suites still pass (240 total). No physical gesture behavior changed.
+
+An isolated disabled preview confirmed the three-tab sidebar, permissions first, default Setup selection, native Settings menu with matching tabs, the trackpad shortcut expanding and scrolling to Advanced calibration, and profile sensitivity selection. Chrome’s inherited sensitivity was read-only; enabling its override showed Unsaved changes and Reset restored the saved state. Full-row clicks were confirmed on Advanced and its nested Diagnostics control. Diagnostics expanded inside Setup and exposed recognition status, test actions, volume preview, logging and recovery-related tools. The final disclosure style is also applied to nested groups. The real configuration was not used for preview edits.
+
+Version 2.6.0 was installed after verifying All changes saved in the prior app. The installed executable matches the tested build and the saved configuration hash is unchanged. The installed UI selects Setup, shows Permissions first, uses the friendly trackpad name, and has Advanced collapsed. Both permissions were initially unverified for the changed local executable; only this bundle ID’s obsolete Accessibility and ListenEvent entries were reset, and the app reopened for fresh user approval. No permission was granted automatically.

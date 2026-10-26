@@ -1,10 +1,10 @@
 # Getting custom gestures running
 
-The Enabled switch selects the master setting. It does not mean macOS has granted permission or that trackpad setup is complete. Dashboard lists the actual blockers under Gesture readiness; Ready custom mappings stays at zero while required permissions or setup are missing.
+The Enabled switch selects the master setting. It does not mean macOS has granted permission or that trackpad setup is complete. Setup puts both permission statuses first; Setup → Advanced → Diagnostics lists technical readiness, filters, and mapping counts.
 
 ## Add the correct application
 
-1. Open the installed EvenBetterTouchTool and go to Dashboard → Permissions.
+1. Open the installed EvenBetterTouchTool and go to Setup → Permissions.
 2. Click **Copy App Path**. It copies the location of the running `.app`, so you do not accidentally grant an old build or the original daemon.
 3. Click **Set Up…** for Input Monitoring. The app requests access and opens System Settings → Privacy & Security → Input Monitoring.
 4. An empty “No Items” list is not an error. Click **+** to choose an application.
@@ -21,10 +21,10 @@ Apple references: [Input Monitoring](https://support.apple.com/guide/mac-help/mc
 
 Permissions alone do not remove the other safety gates:
 
-- In Setup Assistant, manually resolve the listed native gesture conflicts in macOS. Only then check the corresponding confirmations and click **Save**. The app cannot suppress native gestures automatically.
+- In Setup → macOS gestures, manually resolve the listed native gesture conflicts in macOS. Only then check the corresponding confirmations and click **Save**. The app cannot suppress native gestures automatically.
 - Calibration is optional. Without measurements, sensitivity and movement display percentages of each trackpad axis. For exact millimeters, expand Precision calibration, enter measured active-surface dimensions and choose **Use Measurements**, then **Save**; alternatively measure X/Y separately. No device dimensions are assumed.
 - Custom taps also require their separate native tap conflict confirmation and a working physical-button observer.
-- Settings and measurements remain pending until Save. The sidebar and Dashboard report saved readiness, even while an unsaved master switch says Enabled.
+- Settings and measurements remain pending until Save. Diagnostics reports saved readiness, even while an unsaved master switch says Enabled.
 - Default tab navigation applies to Chrome and Finder profiles. Original legacy mappings are preserved; restore the desired profile/cells and Save to adopt continuous tab actions.
 
 Readiness can be tested in Diagnostics after these steps. Raw contact data may be visible before permissions are verified, but the app keeps synthetic custom actions paused. This is intentional. The blue master switch remains blue when its window loses focus; that color indicates its selected value, not permission status.

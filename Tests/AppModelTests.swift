@@ -16,6 +16,28 @@ import CoreGraphics
         } catch { failed += 1; print("FAIL \(name): \(error)") }
     }
     static func main() throws {
+        test("Setup is the default first tab with advanced tools collapsed") { model,_ in
+            try expect(SettingsSection.allCases.map(\.rawValue)==["Setup","Gestures","Sensitivity"])
+            try expect(model.section=="Setup" && model.setupTarget == .permissions && !model.showAdvancedSetup)
+        }
+        test("Diagnostics shortcut opens the consolidated advanced destination without saving") { model,url in
+            let before=try Data(contentsOf:url)
+            model.config.sensitivity.horizontalMM=8; model.section="Gestures"
+            model.showSetup(.diagnostics)
+            try expect(model.section=="Setup" && model.showAdvancedSetup && model.showDiagnosticsSetup && model.setupTarget == .diagnostics)
+            try expect(model.hasPendingChanges && model.savedConfig.sensitivity.horizontalMM==1 && (try Data(contentsOf:url))==before)
+            let revision=model.setupNavigationRevision; model.showSetup(.diagnostics)
+            try expect(model.setupNavigationRevision==revision+1)
+        }
+        test("Calibration and shortcut navigation retain drafts and expose their tools") { model,url in
+            let before=try Data(contentsOf:url)
+            model.config.profiles[0].enabled=false
+            model.showSetup(.calibration)
+            try expect(model.showAdvancedSetup && model.showCalibrationSetup && model.setupTarget == .calibration)
+            model.showSetup(.shortcuts)
+            try expect(model.showShortcutSetup && model.setupTarget == .shortcuts && model.hasPendingChanges)
+            model.resetEdits(); try expect(!model.hasPendingChanges && (try Data(contentsOf:url))==before)
+        }
         test("Editing and waiting do not autosave") { model, url in
             let before = try Data(contentsOf: url)
             model.config.sensitivity.horizontalMM = 8

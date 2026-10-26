@@ -78,7 +78,7 @@ final class ActionExecutor {
             if let s = choice.shortcut(fallback:config.systemShortcuts[kind.rawValue]) {
                 post(s); report("Sent \(kind.title): key \(s.keyCode), \(s.modifiers.joined(separator:" + "))")
             } else if choice == .disabled { report("\(kind.title) keyboard shortcut is disabled in macOS. Enable it in Keyboard Shortcuts.") }
-            else { report("No shortcut for \(kind.title). Verify it in macOS, then configure General → System Shortcuts and Save.") }
+            else { report("No shortcut for \(kind.title). Verify it in macOS, then configure Setup → Advanced → System shortcuts and Save.") }
         }
     }
     private func post(_ s: Shortcut) {

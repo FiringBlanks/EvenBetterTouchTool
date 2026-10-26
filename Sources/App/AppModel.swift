@@ -6,8 +6,16 @@ import UniformTypeIdentifiers
 struct InstalledApplication: Identifiable {
     var id: String; var name: String; var url: URL
 }
+enum SettingsSection: String, CaseIterable, Identifiable {
+    case setup = "Setup", gestures = "Gestures", sensitivity = "Sensitivity"
+    var id:String { rawValue }
+    var symbol:String {
+        switch self { case .setup:return "gearshape"; case .gestures:return "hand.draw"; case .sensitivity:return "slider.horizontal.3" }
+    }
+}
+enum SetupTarget: Hashable { case permissions, applications, advanced, calibration, shortcuts, diagnostics }
 final class AppModel: ObservableObject {
-    static let version = "2.5.2"
+    static let version = "2.6.0"
     private(set) var settingsVisible = false
     var distanceUnit: String { config.movementScale(for: activeDevice).unit }
     var savedDistanceUnit: String { savedConfig.movementScale(for: activeDevice).unit }
@@ -35,7 +43,21 @@ final class AppModel: ObservableObject {
     }
     var applicationURL: URL { Bundle.main.bundleURL }
     @Published var runtimePaused = false
-    @Published var section = "Dashboard"
+    @Published var section = SettingsSection.setup.rawValue
+    @Published var setupTarget = SetupTarget.permissions
+    @Published var setupNavigationRevision = 0
+    @Published var showAdvancedSetup = false
+    @Published var showCalibrationSetup = false
+    @Published var showShortcutSetup = false
+    @Published var showDiagnosticsSetup = false
+    func showSetup(_ target:SetupTarget = .permissions) {
+        section=SettingsSection.setup.rawValue
+        if [.advanced,.calibration,.shortcuts,.diagnostics].contains(target) { showAdvancedSetup=true }
+        if target == .calibration { showCalibrationSetup=true }
+        if target == .shortcuts { showShortcutSetup=true }
+        if target == .diagnostics { showDiagnosticsSetup=true }
+        setupTarget=target; setupNavigationRevision += 1
+    }
     @Published var selectedProfile = ""
     @Published var snapshot = EngineSnapshot()
     @Published var devices: [TrackpadInfo] = []

@@ -65,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
     func windowWillClose(_ notification: Notification) { model.setSettingsVisible(false) }
-    @objc private func diagnostics() { model.section = "Diagnostics"; openSettings() }
+    @objc private func diagnostics() { model.showSetup(.diagnostics); openSettings() }
     @objc private func quit() { NSApp.terminate(nil) }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { openSettings(); return true }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -93,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit; bar.addItem(editItem)
         let settingsItem = NSMenuItem(), settings = NSMenu(title: "Settings")
-        for section in ["Dashboard", "Gestures", "Applications", "Sensitivity", "Trackpad Calibration", "Setup Assistant", "General", "Diagnostics"] {
+        for section in SettingsSection.allCases.map(\.rawValue) {
             let item = settings.addItem(withTitle: section, action: #selector(showSection(_:)), keyEquivalent: "")
             item.target = self; item.representedObject = section
         }

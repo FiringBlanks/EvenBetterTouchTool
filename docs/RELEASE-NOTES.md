@@ -1,9 +1,10 @@
-# EvenBetterTouchTool 2.5.2 — Deliberate pointer dismissal
+# EvenBetterTouchTool 2.6.0 — Consolidated Setup
 
-- The volume indicator starts fading early only after the pointer moves at least 24 logical screen points away from its location at the latest volume adjustment. Small repeated wobbles do not accumulate.
-- Adding/removing fingers, other gestures, typing, scrolling, clicks without movement, and app changes no longer dismiss it early. Only movement/drag events are monitored while feedback is visible.
-- New volume adjustments reset the pointer reference and can revive a fade. The existing two-second idle fade, stable position, and immediate bar updates remain.
-- Native display-only volume HUD compatibility was investigated on Tahoe, but visual success was not confirmed. The working custom indicator is retained; no extra volume keys or private HUD calls ship.
-- Saved mappings, sensitivity, and profiles are preserved. No settings are saved implicitly.
+- Setup is the first, default-selected tab. Gestures and Sensitivity are the only other sidebar tabs; the native Settings menu matches.
+- Permissions have their own section at the very top. Trackpad selection, startup, native gesture setup, application profiles, and import/export follow.
+- One collapsed Advanced section at the bottom contains calibration and live contact testing, system shortcuts, diagnostics, configuration files, and recovery. Disclosure rows are clickable across their labels. The menu-bar Diagnostics shortcut opens the correct Setup destination.
+- Application sensitivity overrides live in the Sensitivity tab beside a global/application selector. Inherited settings remain read-only until overridden.
+- Promotional taglines and page subtitles are removed. Permission checks, master enable, contact displays, version information, and recovery controls are consolidated instead of repeated.
+- Existing gesture mappings and Save/Reset behavior are preserved. Navigation and disclosure changes do not save settings.
 
-All 237 checks pass: 187 core, 31 app-model/executor, 14 installer, and five native panel checks. Physical pointer/finger transitions remain manual acceptance checks. Local ad-hoc updates may need fresh Accessibility and Input Monitoring approvals.
+The complete build/check suite passes (240 checks: 187 core, 34 app-model, 14 installer, five native panel checks). An isolated disabled preview is used for layout and navigation checks; no physical gesture acceptance is claimed for a UI reorganization. Local ad-hoc updates may require fresh Accessibility and Input Monitoring approval.
