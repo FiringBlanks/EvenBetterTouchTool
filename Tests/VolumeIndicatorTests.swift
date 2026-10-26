@@ -25,21 +25,34 @@ import AppKit
             indicator.show(VolumeLevel(value:1,muted:false),anchoredTo:item.button); pump(0.05)
             try expect(indicator.frame == first && visibility == [true] && item.length == VolumeIndicator.statusWidth)
         }
-        test("Interaction begins a fade and closes the panel") { indicator,item in
+        test("Small pointer drift stays visible; deliberate displacement begins a fade") { indicator,item in
+            let origin=NSEvent.mouseLocation
             indicator.show(VolumeLevel(value:0.42,muted:false),anchoredTo:item.button)
-            indicator.dismissForInteraction(); try expect(indicator.fading)
+            for _ in 0..<20 { indicator.pointerMoved(to:NSPoint(x:origin.x+8,y:origin.y-4)); indicator.pointerMoved(to:origin) }
+            try expect(!indicator.fading && indicator.frame != nil)
+            indicator.pointerMoved(to:NSPoint(x:origin.x+23,y:origin.y)); try expect(!indicator.fading)
+            indicator.pointerMoved(to:NSPoint(x:origin.x+24,y:origin.y)); try expect(indicator.fading)
             pump(0.35); try expect(indicator.frame == nil)
         }
         test("A new volume update cancels an old fade without moving or hiding the panel") { indicator,item in
+            let origin=NSEvent.mouseLocation
             indicator.show(VolumeLevel(value:0.42,muted:false),anchoredTo:item.button)
             let first = indicator.frame
-            indicator.dismissForInteraction(); indicator.show(VolumeLevel(value:0.44,muted:false),anchoredTo:item.button)
+            indicator.pointerMoved(to:NSPoint(x:origin.x+30,y:origin.y)); indicator.show(VolumeLevel(value:0.44,muted:false),anchoredTo:item.button)
             try expect(!indicator.fading); pump(0.35)
             try expect(first != nil && indicator.frame == first)
         }
         test("Idle feedback closes after its two-second deadline and fade") { indicator,item in
             indicator.show(VolumeLevel(value:0.42,muted:false),anchoredTo:item.button)
             pump(2.4); try expect(indicator.frame == nil)
+        }
+        test("Clicks, typing, and scrolling do not initiate an early fade") { indicator,item in
+            indicator.show(VolumeLevel(value:0.42,muted:false),anchoredTo:item.button)
+            let click=NSEvent.mouseEvent(with:.leftMouseDown,location:.zero,modifierFlags:[],timestamp:0,windowNumber:0,context:nil,eventNumber:1,clickCount:1,pressure:1)!
+            let key=NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:[],timestamp:0,windowNumber:0,context:nil,characters:"x",charactersIgnoringModifiers:"x",isARepeat:false,keyCode:7)!
+            let scroll=NSEvent(cgEvent:CGEvent(scrollWheelEvent2Source:nil,units:.pixel,wheelCount:1,wheel1:20,wheel2:0,wheel3:0)!)!
+            for event in [click,key,scroll] { indicator.handleEvent(event) }
+            try expect(!indicator.fading && indicator.frame != nil)
         }
         print("\n\(passed) indicator tests passed; \(failed) failed")
         if failed > 0 { exit(1) }

@@ -1,11 +1,11 @@
-# Delivery and validation — 2026-10-25
+# Delivery and validation — updated 2026-10-26
 
 ## Artifacts
 
 - Standalone Apple Silicon application: `build/EvenBetterTouchTool.app`
-- Installable archive: `build/EvenBetterTouchTool-2.5.1-arm64.zip`
-- Archive checksum: `build/EvenBetterTouchTool-2.5.1-arm64.zip.sha256`
-- Raw local build/test log: `build/responsiveness-check.log`
+- Installable archive: `build/EvenBetterTouchTool-2.5.2-arm64.zip`
+- Archive checksum: `build/EvenBetterTouchTool-2.5.2-arm64.zip.sha256`
+- Raw local build/test log: `build/pointer-dismissal-check.log`
 - Double-click installer: `Install.command`
 - Local installer: `install.sh` (inspect using `./install.sh --dry-run` first)
 - Uninstaller: `uninstall.sh`
@@ -19,7 +19,7 @@ Build host: Apple Silicon, macOS 26.6.2, Swift 6.3.2, Command Line Tools. Target
 `make check` completed successfully:
 
 - Native application compilation: PASS, no compiler warnings.
-- Deterministic automated core suite: **182 core + 31 app-model + 14 shortcut lifecycle + 4 native indicator tests passed, 0 failed (231 total)**.
+- Deterministic automated core suite: **187 core + 31 app-model + 14 shortcut lifecycle + 5 native indicator tests passed, 0 failed (237 total)**.
 - `--smoke-test`: PASS (default schema validation and AppKit-linked executable startup).
 - `codesign --verify --strict`: PASS.
 - App `Info.plist` validation: PASS.
@@ -149,3 +149,13 @@ All 231 checks pass. New regression cases cover a final sub-jitter increment com
 In the isolated disabled preview, four-finger Click displayed all five category submenus. Selecting Navigation → Mission Control updated only the editor; Reset restored No Action and disabled Save. The full list was also confirmed in the old UI: its apparent shortage was a long scrolling menu, not action filtering. Real volume-bar timing and physical movement acceptance remain manual checks.
 
 Version 2.5.1 was installed after checking the working app had no unsaved edits. The installed binary matches the tested build, its code signature verifies, and the saved configuration hash is unchanged. Both permissions were unverified for the changed local binary; only this bundle ID’s obsolete Accessibility and ListenEvent records were reset, and the app reopened for fresh user approval. No permission was granted automatically.
+
+## Version 2.5.2 checks
+
+The dismissal gate measures net pointer displacement from the latest volume adjustment, with a 24-point threshold. Pure tests cover 1,000 small wobbles without dismissal, exact threshold boundaries, opposite and diagonal motion, a new reference position, reset, invalid coordinates, and negative display origins. Native panel tests cover small versus deliberate motion, fade/revival, idle closure, stable frame, and click/key/scroll events that leave the panel visible. Synthetic event objects are constructed but never posted. Trackpad/action/app-activation dismissal hooks are removed; finger counts cannot directly dismiss feedback. All 237 checks pass. Physical finger transitions and pointer intent remain manual acceptance checks.
+
+A separate read-only probe confirmed the private OSDManager selectors on the host. A display-only call using the current output level returned without error, but the system indicator could not be inspected reliably and the user reported not seeing it or being unsure. No native visual success is claimed; the probe changes no audio, and its private calls are not included in the shipping app. See NATIVE-VOLUME-INDICATOR.md.
+
+The isolated disabled preview showed feedback as Visible after Preview Volume Indicator. Repeating the preview and pressing Tab left it Visible. The real installed app was checked for All changes saved before updating; no preview edit touched the real configuration.
+
+Version 2.5.2 is installed. Its executable matches the tested build, signature verification passes, and the saved configuration hash is unchanged. Both permissions were unverified for the new locally signed executable; only this bundle ID’s obsolete Accessibility/ListenEvent entries were cleared, and the app reopened for the user to approve the final build. No permission was granted automatically.

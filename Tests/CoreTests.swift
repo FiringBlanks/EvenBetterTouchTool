@@ -198,6 +198,32 @@ import Foundation
         test("Unavailable interception is exposed as a swipe readiness blocker") { try expect(GestureReadiness.blockers(config:ready(),app:"com.google.Chrome",device:"test",accessibility:true,inputMonitoring:true,scrollFiltering:false).contains(.scrollFiltering)) }
         test("Volume feedback closes two seconds after the last change") { var v=VolumePresentation(); try expect(!v.visible(at:0)); v.update(VolumeLevel(value:0.42,muted:false),time:1); try expect(v.visible(at:2.99) && !v.visible(at:3) && v.level.percent==42); v.update(VolumeLevel(value:0.44,muted:false),time:2.9); try expect(v.visible(at:4.89) && !v.visible(at:4.9) && v.level.percent==44) }
         test("Volume feedback clamps display and handles mute") { try expect(VolumeLevel(value:1.2,muted:false).percent==100 && VolumeLevel(value:-0.2,muted:false).percent==0); var v=VolumePresentation(); v.update(VolumeLevel(value:0.5,muted:true),time:0); try expect(v.level.muted && v.level.percent==50) }
+        test("Volume pointer dismissal ignores accumulated wobble") {
+            var p=VolumePointerDismissal(); p.reset(at:CGPoint(x:100,y:100))
+            for i in 0..<1000 { try expect(!p.shouldDismiss(at:CGPoint(x:i%2==0 ? 108:92,y:104))) }
+        }
+        test("Volume pointer dismissal requires meaningful net displacement in any direction") {
+            var p=VolumePointerDismissal(); p.reset(at:CGPoint(x:0,y:0))
+            try expect(!p.shouldDismiss(at:CGPoint(x:23.99,y:0)) && p.shouldDismiss(at:CGPoint(x:24,y:0)))
+            try expect(p.shouldDismiss(at:CGPoint(x:-24,y:0)) && p.shouldDismiss(at:CGPoint(x:0,y:-24)))
+            try expect(!p.shouldDismiss(at:CGPoint(x:16,y:16)) && p.shouldDismiss(at:CGPoint(x:17,y:17)))
+        }
+        test("A fresh volume update resets pointer intent baseline") {
+            var p=VolumePointerDismissal(); p.reset(at:CGPoint(x:0,y:0))
+            try expect(!p.shouldDismiss(at:CGPoint(x:20,y:0)))
+            p.reset(at:CGPoint(x:20,y:0))
+            try expect(!p.shouldDismiss(at:CGPoint(x:40,y:0)) && p.shouldDismiss(at:CGPoint(x:44,y:0)))
+        }
+        test("Volume pointer intent resets on hide and rejects invalid positions") {
+            var p=VolumePointerDismissal(); try expect(!p.shouldDismiss(at:CGPoint(x:100,y:0)))
+            p.reset(at:CGPoint(x:0,y:0)); try expect(!p.shouldDismiss(at:CGPoint(x:Double.nan,y:0)))
+            p.reset(at:CGPoint(x:Double.infinity,y:0)); try expect(!p.shouldDismiss(at:CGPoint(x:100,y:0)))
+            p.reset(at:CGPoint(x:0,y:0)); p.reset(); try expect(!p.shouldDismiss(at:CGPoint(x:100,y:0)))
+        }
+        test("Volume pointer threshold uses logical coordinates across negative display origins") {
+            var p=VolumePointerDismissal(); p.reset(at:CGPoint(x:-1500,y:900))
+            try expect(!p.shouldDismiss(at:CGPoint(x:-1480,y:900)) && p.shouldDismiss(at:CGPoint(x:-1476,y:900)))
+        }
         test("Scroll interception eligibility respects profiles and disabled rows") { var c=ready(); let g=Gesture(fingers:3,direction:.right); try expect(c.scrollInterceptedGestures(app:"com.google.Chrome",device:"test").contains(g)); c.profiles[0].rowEnabled=["3":false]; try expect(!c.scrollInterceptedGestures(app:"com.google.Chrome",device:"test").contains(g)) }
         test("Scroll interception follows reversed actions instead of their original kind") { var c=ready(); let up=Gesture(fingers:4,direction:.up),down=Gesture(fingers:4,direction:.down); c.mappings[up.id]=Mapping(action:Action(kind:.native),reverse:true); c.mappings[down.id]=Mapping(action:Action(kind:.showDesktop),reverse:true); let custom=c.scrollInterceptedGestures(app:"com.google.Chrome",device:"test"); try expect(custom.contains(up) && !custom.contains(down)) }
         test("Fresh defaults enable deliberate playback and keep forgiving taps disabled") { let c=Configuration.defaults,t=c.sensitivity.effectiveTapOptions; try expect(close(t.duration,0.5) && close(t.movement,2) && close(t.landingWindow,0.15) && close(t.releaseWindow,0.2)); try expect(c.mappings["3_tap"]?.enabled==false && c.mappings["3_click"]?.enabled==true && c.mappings["3_click"]?.action.kind == .playPause) }

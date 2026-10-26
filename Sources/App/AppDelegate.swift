@@ -45,8 +45,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self else { return }
             self.volumeIndicator.show(level,anchoredTo:self.statusItem?.button)
         }
-        volumeIndicator.isVolumeGesture = { [weak self] in self?.model.driver.adjustingVolume ?? false }
-        model.onOtherInteraction = { [weak self] in self?.volumeIndicator.dismissForInteraction() }
         installMainMenu()
         installEmergencyHotkey()
         if !preview { model.start() }

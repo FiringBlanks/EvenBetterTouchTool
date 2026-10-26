@@ -7,7 +7,7 @@ struct InstalledApplication: Identifiable {
     var id: String; var name: String; var url: URL
 }
 final class AppModel: ObservableObject {
-    static let version = "2.5.1"
+    static let version = "2.5.2"
     private(set) var settingsVisible = false
     var distanceUnit: String { config.movementScale(for: activeDevice).unit }
     var savedDistanceUnit: String { savedConfig.movementScale(for: activeDevice).unit }
@@ -49,7 +49,6 @@ final class AppModel: ObservableObject {
     @Published var scrollFiltering = false
     @Published var volumeIndicatorVisible = false
     var onVolumeFeedback: (VolumeLevel) -> Void = { _ in }
-    var onOtherInteraction: () -> Void = {}
     @Published var lastAction = "None"
     @Published var lastActionDate: Date?
     @Published var message = ""
@@ -83,7 +82,6 @@ final class AppModel: ObservableObject {
         driver.onStatus = { [weak self] s in self?.engineStatus = s }
         driver.onButtonObserver = { [weak self] b in self?.buttonObserver = b }
         driver.onScrollFiltering = { [weak self] enabled in self?.scrollFiltering = enabled }
-        driver.onOtherInteraction = { [weak self] in self?.onOtherInteraction() }
         driver.onDevices = { [weak self] list, selected in
             guard let self else { return }; self.devices = list; self.activeDevice = selected
             if selected.isEmpty { self.snapshot = EngineSnapshot() }
@@ -107,7 +105,6 @@ final class AppModel: ObservableObject {
                   foreground == app || (independentMedia && self.savedConfig.mapping(trigger.gesture,app:foreground) == trigger.mapping),
                   self.configurationIssue.isEmpty, self.savedConfig.blockedReason(trigger.gesture, mapping: trigger.mapping, device: self.activeDevice) == nil else { return }
             if trigger.gesture.direction.isSwipe && !self.scrollFiltering { self.record("Custom swipe paused: scroll interception unavailable"); return }
-            if ![.volumeUp,.volumeDown].contains(trigger.mapping.action.kind) { self.onOtherInteraction() }
             self.executor.execute(trigger, app: app, config: self.savedConfig)
         }
     }

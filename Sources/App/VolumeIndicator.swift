@@ -8,13 +8,12 @@ final class VolumeIndicator {
     private var host: NSHostingView<VolumeIndicatorView>?
     private var dismissal: DispatchWorkItem?
     private var presentation = VolumePresentation()
+    private var pointerDismissal = VolumePointerDismissal()
     private weak var anchor: NSStatusBarButton?
     private var transition = 0
     private var globalMonitor: Any?
     private var localMonitor: Any?
-    private var activationObserver: NSObjectProtocol?
     var onVisibilityChanged: (Bool) -> Void = { _ in }
-    var isVolumeGesture: () -> Bool = { false }
     var frame: NSRect? { panel?.isVisible == true ? panel?.frame : nil }
     var fading: Bool { presentation.phase == .fading }
     deinit { stopMonitoring() }
@@ -25,6 +24,7 @@ final class VolumeIndicator {
         // Capture the stable right edge before changing the item's title/width.
         let anchorRect = button.window?.convertToScreen(button.convert(button.bounds,to:nil)) ?? NSRect(x:screen.visibleFrame.maxX-24,y:screen.visibleFrame.maxY,width:0,height:0)
         presentation.update(level,time:ProcessInfo.processInfo.systemUptime)
+        pointerDismissal.reset(at:NSEvent.mouseLocation)
         transition += 1
         dismissal?.cancel()
         anchor = button
@@ -60,9 +60,9 @@ final class VolumeIndicator {
     }
     private func dismissIfDue() {
         guard !presentation.visible(at:ProcessInfo.processInfo.systemUptime) else { return }
-        dismissForInteraction()
+        beginFade()
     }
-    func dismissForInteraction() {
+    private func beginFade() {
         guard presentation.beginFade() else { return }
         dismissal?.cancel(); dismissal = nil
         transition += 1; let token = transition
@@ -74,32 +74,28 @@ final class VolumeIndicator {
             self.hide()
         }
     }
-    private func interact(_ event: NSEvent) {
-        if event.type == .scrollWheel {
-            // Gesture tails are continuations, not a new user action.
-            if !event.momentumPhase.isEmpty || event.phase.contains(.ended) || event.phase.contains(.cancelled) { return }
-            if isVolumeGesture() { return }
-        }
-        dismissForInteraction()
+    func pointerMoved(to point: NSPoint) {
+        if pointerDismissal.shouldDismiss(at:point) { beginFade() }
+    }
+    func handleEvent(_ event: NSEvent) {
+        guard [.mouseMoved,.leftMouseDragged,.rightMouseDragged,.otherMouseDragged].contains(event.type) else { return }
+        pointerMoved(to:NSEvent.mouseLocation)
     }
     private func startMonitoring() {
         guard globalMonitor == nil, localMonitor == nil else { return }
-        let mask: NSEvent.EventTypeMask = [.mouseMoved,.leftMouseDragged,.rightMouseDragged,.otherMouseDragged,
-            .leftMouseDown,.rightMouseDown,.otherMouseDown,.leftMouseUp,.rightMouseUp,.otherMouseUp,
-            .keyDown,.keyUp,.flagsChanged,.scrollWheel,.magnify,.rotate]
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching:mask) { [weak self] in self?.interact($0) }
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching:mask) { [weak self] event in self?.interact(event); return event }
-        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didActivateApplicationNotification,object:nil,queue:.main) { [weak self] _ in self?.dismissForInteraction() }
+        let mask: NSEvent.EventTypeMask = [.mouseMoved,.leftMouseDragged,.rightMouseDragged,.otherMouseDragged]
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching:mask) { [weak self] in self?.handleEvent($0) }
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching:mask) { [weak self] event in self?.handleEvent(event); return event }
     }
     private func stopMonitoring() {
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
-        if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
-        globalMonitor = nil; localMonitor = nil; activationObserver = nil
+        globalMonitor = nil; localMonitor = nil
     }
     func hide() {
         let wasVisible = presentation.phase != .hidden
         transition += 1; presentation.hide()
+        pointerDismissal.reset()
         dismissal?.cancel(); dismissal = nil; panel?.orderOut(nil); panel?.alphaValue = 1
         stopMonitoring()
         anchor?.title = ""; anchor?.font = .systemFont(ofSize:NSFont.systemFontSize)
