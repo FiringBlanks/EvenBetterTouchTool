@@ -7,7 +7,7 @@ struct InstalledApplication: Identifiable {
     var id: String; var name: String; var url: URL
 }
 final class AppModel: ObservableObject {
-    static let version = "2.5.0"
+    static let version = "2.5.1"
     private(set) var settingsVisible = false
     var distanceUnit: String { config.movementScale(for: activeDevice).unit }
     var savedDistanceUnit: String { savedConfig.movementScale(for: activeDevice).unit }

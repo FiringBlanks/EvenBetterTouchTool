@@ -10,20 +10,27 @@ final class ActionExecutor {
     private var sequenceGeneration = 0
     private var lastBudgetTime = 0.0
     private var budget = 0
+    private let isTrusted: () -> Bool
+    private let adjustVolume: (Double) throws -> VolumeLevel
+    init(isTrusted: @escaping () -> Bool = { AXIsProcessTrusted() }, adjustVolume: @escaping (Double) throws -> VolumeLevel = SystemAudio.adjust) {
+        self.isTrusted = isTrusted; self.adjustVolume = adjustVolume
+    }
     func cancel() { sequenceGeneration += 1; sequenceActive = false }
     func execute(_ trigger: GestureTrigger, app: String, config: Configuration) {
-        guard AXIsProcessTrusted() else { report("Accessibility permission required"); return }
+        guard isTrusted() else { report("Accessibility permission required"); return }
+        let commands = ActionPlanner.commands(trigger.mapping.action, app: app, sensitivity: config.sensitivity(for: app))
+        // A whole volume batch is one Core Audio adjustment, not synthetic
+        // input. Neither its distance count nor other actions consume its budget.
+        if commands.count == 1, case .volume(let delta) = commands[0] {
+            report(trigger.mapping.action.kind.title)
+            perform(.volume(delta*Double(trigger.count)),config:config); return
+        }
         let now = ProcessInfo.processInfo.systemUptime
         if now-lastBudgetTime >= 1 { budget = 0; lastBudgetTime = now }
         guard budget + trigger.count <= 120 else { report("Input rate limit reached; excess distance discarded"); return }
         budget += trigger.count
         if app == "com.apple.finder", [.previousTab, .nextTab].contains(trigger.mapping.action.kind), !finderHasTabs() {
             report("Finder: no eligible tabbed focused window"); return
-        }
-        let commands = ActionPlanner.commands(trigger.mapping.action, app: app, sensitivity: config.sensitivity(for: app))
-        if commands.count == 1, case .volume(let delta) = commands[0] {
-            report(trigger.mapping.action.kind.title)
-            perform(.volume(delta*Double(trigger.count)),config:config); return
         }
         if commands.count > 1 {
             // A sequence never overlaps another sequence and is cancelled by any settings/app change.
@@ -54,7 +61,7 @@ final class ActionExecutor {
                 event?.cgEvent?.setIntegerValueField(.eventSourceUserData, value: Self.eventTag)
                 event?.cgEvent?.post(tap: .cghidEventTap)
             }
-        case .volume(let delta): do { volumeChanged(try SystemAudio.adjust(delta)) } catch { report(error.localizedDescription) }
+        case .volume(let delta): do { volumeChanged(try adjustVolume(delta)) } catch { report(error.localizedDescription) }
         case .mute: do { try SystemAudio.toggleMute() } catch { report(error.localizedDescription) }
         case .mouse(let button):
             guard let source = CGEventSource(stateID: .hidSystemState), let position = CGEvent(source: nil)?.location, let mouse = CGMouseButton(rawValue: UInt32(button)) else { return }

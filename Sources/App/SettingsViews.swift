@@ -257,10 +257,21 @@ struct MappingEditor: View {
                 }
                 Section("Action") {
                     Toggle("Enable this gesture", isOn: $draft.enabled)
-                    Picker("Assigned action", selection: $draft.action.kind) {
-                        ForEach(["Navigation","Media / System","Mouse / Keyboard","Applications","Miscellaneous"], id: \.self) { category in
-                            Section(category) { ForEach(ActionKind.allCases.filter { $0.category == category }) { kind in Text(kind.title).tag(kind) } }
-                        }
+                    LabeledContent("Assigned action") {
+                        Menu {
+                            ForEach(["Navigation","Media / System","Mouse / Keyboard","Applications","Miscellaneous"], id: \.self) { category in
+                                Menu(category) {
+                                    ForEach(ActionKind.allCases.filter { $0.category == category }) { kind in
+                                        Button { draft.action.kind = kind } label: {
+                                            if draft.action.kind == kind { Label(kind.title,systemImage:"checkmark") }
+                                            else { Text(kind.title) }
+                                        }
+                                    }
+                                }
+                            }
+                        } label: { Text(draft.action.kind.title) }
+                        .accessibilityLabel("Assigned action: \(draft.action.kind.title)")
+                        .help("Choose from Navigation, Media / System, Mouse / Keyboard, Applications, or Miscellaneous.")
                     }
                     ActionParameters(action: $draft.action, model: model)
                     if draft.action.kind == .notificationCenter { Text("Assign a custom keyboard shortcut to open Notification Center.").foregroundStyle(.orange) }
@@ -293,7 +304,7 @@ struct MappingEditor: View {
                         Toggle("Override distance", isOn: Binding(get: { draft.distanceMM != nil }, set: { draft.distanceMM = $0 ? 1 : nil }))
                         if draft.distanceMM != nil { NumericSlider(title: "Distance per action", value: Binding(get: { draft.distanceMM ?? 1 }, set: { draft.distanceMM = $0 }), range: 0.5...20, unit: model.distanceUnit) }
                         Toggle("Reverse direction", isOn: $draft.reverse)
-                        NumericSlider(title: "Cooldown", value: $draft.cooldown, range: 0...5, unit: "s").help("Movement during a cooldown is discarded.")
+                        NumericSlider(title: "Cooldown", value: $draft.cooldown, range: 0...5, unit: "s").help([ActionKind.volumeUp,.volumeDown].contains(draft.action.kind) ? "Volume steps are retained during cooldown and applied on the next movement after it ends." : "Movement during a cooldown is discarded.")
                     }.disabled(inherited)
                 }
                 Section {

@@ -29,6 +29,39 @@ import Foundation
         test("Three finger previous tab") { let e=engine(); _=e.process(frame(0)); try expect(e.process(frame(0.1,3,0.39)).first?.mapping.action.kind == .previousTab) }
         test("Four finger vertical continuous volume 12 mm / three steps") { let e=engine(); _=e.process(frame(0,4)); let t=e.process(frame(0.1,4,0.4,0.52)); try expect(count(t)==3); try expect(t.first?.mapping.action.kind == .volumeUp) }
         test("Four finger volume down") { let e=engine(); _=e.process(frame(0,4)); try expect(e.process(frame(0.1,4,0.4,0.36)).first?.mapping.action.kind == .volumeDown) }
+        test("A sub-jitter final increment completes the next volume interval") {
+            var c=ready(); c.sensitivity.verticalMM=0.5
+            let e=engine(c); _=e.process(frame(0,4))
+            try expect(count(e.process(frame(0.1,4,0.4,0.4096)))==1)
+            try expect(count(e.process(frame(0.2,4,0.4,0.41)))==1)
+            try expect(e.process(frame(0.3,4,0.4,0.41)).isEmpty)
+        }
+        test("Every small forward increment counts after direction lock") {
+            var c=ready(); c.sensitivity.verticalMM=0.5
+            let e=engine(c); _=e.process(frame(0,4)); var total=0
+            for i in 1...400 { total += count(e.process(frame(Double(i)/120,4,0.4,0.4+Double(i)*0.00005))) }
+            try expect(total==4)
+            for i in 401...460 { try expect(e.process(frame(Double(i)/120,4,0.4,0.42)).isEmpty) }
+        }
+        test("Small reverse noise does not manufacture volume steps") {
+            var c=ready(); c.sensitivity.verticalMM=0.5
+            let e=engine(c); _=e.process(frame(0,4)); _=e.process(frame(0.1,4,0.4,0.405))
+            for i in 1...60 { try expect(e.process(frame(0.1+Double(i)/120,4,0.4,i%2==0 ? 0.405 : 0.4048)).isEmpty) }
+        }
+        test("Volume cooldown retains complete intervals until subsequent movement") {
+            var c=ready(); c.sensitivity.verticalMM=0.5; c.mappings["4_up"]?.cooldown=0.5
+            let e=engine(c); _=e.process(frame(0,4))
+            try expect(count(e.process(frame(0.1,4,0.4,0.405)))==1)
+            try expect(e.process(frame(0.2,4,0.4,0.415)).isEmpty)
+            try expect(e.process(frame(0.4,4,0.4,0.42)).isEmpty)
+            try expect(e.process(frame(0.6,4,0.4,0.42)).isEmpty)
+            try expect(count(e.process(frame(0.61,4,0.4,0.425)))==4)
+        }
+        test("Large continuous volume batches use all distance without cancelling") {
+            var c=ready(); c.sensitivity.verticalMM=0.5; c.calibrations["test"]?.heightMM=300
+            let e=engine(c); _=e.process(frame(0,4))
+            try expect(count(e.process(frame(0.1,4,0.4,0.6)))==120 && e.adjustingVolume)
+        }
         test("Three finger vertical Mission Control is one-shot") { let e=engine(); _=e.process(frame(0)); try expect(e.process(frame(0.1,3,0.4,0.45)).first?.mapping.action.kind == .missionControl); try expect(e.process(frame(0.2,3,0.4,0.5)).isEmpty) }
         test("Three finger down App Exposé") { let e=engine(); _=e.process(frame(0)); try expect(e.process(frame(0.1,3,0.4,0.35)).first?.mapping.action.kind == .appExpose) }
         test("Two fingers never trigger") { let e=engine(); _=e.process(frame(0,2)); try expect(e.process(frame(0.1,2,0.5)).isEmpty); try expect(e.process(frame(0.2,0)).isEmpty) }

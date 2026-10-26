@@ -220,6 +220,28 @@ import CoreGraphics
             let saved=try ConfigurationStore(url:url).load()
             try expect(saved.mappings==globals && saved.profiles[0].mappings==expected)
         }
+        test("Volume batches bypass input budget and perform one aggregate audio write") { _,_ in
+            var deltas=[Double](), levels=[VolumeLevel](), messages=[String]()
+            let executor=ActionExecutor(isTrusted:{true},adjustVolume:{ delta in deltas.append(delta); return VolumeLevel(value:0.7,muted:false) })
+            executor.volumeChanged={levels.append($0)}; executor.report={messages.append($0)}
+            let g=Gesture(fingers:4,direction:.up), config=Configuration.defaults
+            executor.execute(GestureTrigger(gesture:g,mapping:Mapping(action:Action(kind:.none)),count:120),app:"",config:config)
+            executor.execute(GestureTrigger(gesture:g,mapping:Mapping(action:Action(kind:.volumeUp)),count:150),app:"",config:config)
+            try expect(deltas==[3] && levels==[VolumeLevel(value:0.7,muted:false)] && !messages.contains { $0.contains("rate limit") })
+            executor.execute(GestureTrigger(gesture:g,mapping:Mapping(action:Action(kind:.volumeDown,volumePercent:0.5)),count:3),app:"",config:config)
+            try expect(deltas.count==2 && abs(deltas[1]+0.015)<0.00001)
+        }
+        test("Volume permission and unsupported output failures remain enforced") { _,_ in
+            var writes=0, reports=[String]()
+            let denied=ActionExecutor(isTrusted:{false},adjustVolume:{ _ in writes+=1; return VolumeLevel(value:0,muted:false) })
+            denied.report={reports.append($0)}
+            let trigger=GestureTrigger(gesture:Gesture(fingers:3,direction:.up),mapping:Mapping(action:Action(kind:.volumeUp)),count:1)
+            denied.execute(trigger,app:"",config:.defaults)
+            try expect(writes==0 && reports.last=="Accessibility permission required")
+            let unsupported=ActionExecutor(isTrusted:{true},adjustVolume:{ _ in throw ConfigError.invalid("No software volume") })
+            unsupported.report={reports.append($0)}; unsupported.execute(trigger,app:"",config:.defaults)
+            try expect(reports.last?.contains("No software volume")==true)
+        }
         print("\n\(passed) model tests passed; \(failed) failed")
         if failed > 0 { exit(1) }
     }

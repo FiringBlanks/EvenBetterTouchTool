@@ -41,7 +41,9 @@ final class VolumeIndicator {
             let host = NSHostingView(rootView:VolumeIndicatorView(level:level))
             p.contentView = host; self.host = host; panel = p
         }
-        host?.rootView = VolumeIndicatorView(level:level)
+        var transaction = Transaction(animation:nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { host?.rootView = VolumeIndicatorView(level:level) }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0
             panel?.animator().alphaValue = 1
@@ -115,7 +117,12 @@ struct VolumeIndicatorView: View {
                 Text("System Volume").fontWeight(.semibold)
                 Spacer(); Text(level.muted ? "Muted" : "\(level.percent)%").monospacedDigit()
             }
-            ProgressView(value:level.muted ? 0 : min(1,max(0,level.value))).tint(.primary)
+            GeometryReader { geometry in
+                ZStack(alignment:.leading) {
+                    Capsule().fill(.primary.opacity(0.15))
+                    Capsule().fill(.primary).frame(width:geometry.size.width * (level.muted ? 0 : min(1,max(0,level.value))))
+                }
+            }.frame(height:6).transaction { $0.animation = nil; $0.disablesAnimations = true }
                 .accessibilityLabel("System volume").accessibilityValue(level.muted ? "Muted" : "\(level.percent) percent")
         }.padding(22).frame(width:280,height:112).background(.regularMaterial,in:RoundedRectangle(cornerRadius:18))
     }

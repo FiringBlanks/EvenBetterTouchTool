@@ -3,9 +3,9 @@
 ## Artifacts
 
 - Standalone Apple Silicon application: `build/EvenBetterTouchTool.app`
-- Installable archive: `build/EvenBetterTouchTool-2.5.0-arm64.zip`
-- Archive checksum: `build/EvenBetterTouchTool-2.5.0-arm64.zip.sha256`
-- Raw local build/test log: `build/volume-swap-check.log`
+- Installable archive: `build/EvenBetterTouchTool-2.5.1-arm64.zip`
+- Archive checksum: `build/EvenBetterTouchTool-2.5.1-arm64.zip.sha256`
+- Raw local build/test log: `build/responsiveness-check.log`
 - Double-click installer: `Install.command`
 - Local installer: `install.sh` (inspect using `./install.sh --dry-run` first)
 - Uninstaller: `uninstall.sh`
@@ -19,7 +19,7 @@ Build host: Apple Silicon, macOS 26.6.2, Swift 6.3.2, Command Line Tools. Target
 `make check` completed successfully:
 
 - Native application compilation: PASS, no compiler warnings.
-- Deterministic automated core suite: **177 core + 29 app-model + 14 shortcut lifecycle + 4 native indicator tests passed, 0 failed (224 total)**.
+- Deterministic automated core suite: **182 core + 31 app-model + 14 shortcut lifecycle + 4 native indicator tests passed, 0 failed (231 total)**.
 - `--smoke-test`: PASS (default schema validation and AppKit-linked executable startup).
 - `codesign --verify --strict`: PASS.
 - App `Info.plist` validation: PASS.
@@ -141,3 +141,11 @@ The built/downloadable app is 2.4.1. The user's working installed 2.4.0 app is d
 Build, signature, metadata, smoke, and shell checks passed. Four native AppKit indicator tests inspect the actual panel frame while the status item expands and percentage changes from 9% to 99% to 100%, actual fade closure, revival during an existing fade without a stale close, and idle timeout plus fade. The tests use a normal macOS graphics session, temporary UI, no input injection, and no audio changes. Pure state tests cover fade revival, volume/nonvolume gesture classification, reversed native directions, mapping swaps, inherited profile values, disabled row preservation, missing cells/profiles, and Reset. App-model tests verify that swaps never write/apply before Save and persist only in the selected profile.
 
 After the user unlocked the Mac, the isolated disabled preview was inspected visually: all six swap icons align between their columns. Swapping Up changed both cells and showed Unsaved changes; Reset restored both cells, and a separate explicit Save committed the test-only change. The working installation showed All changes saved before updating. Version 2.5.0 was then installed; its executable matches the tested build, its signature verifies, and the saved configuration hash is unchanged. The updated app runs and receives selected-trackpad contacts. Accessibility and Input Monitoring need renewed user approval for the changed locally signed binary; no permissions were granted automatically. Actual mouse-triggered dismissal and a physical continuous-volume session still need manual acceptance after those approvals. See the manual checklist before claiming hardware acceptance.
+
+## Version 2.5.1 checks
+
+All 231 checks pass. New regression cases cover a final sub-jitter increment completing a volume interval, 400 tiny forward samples without lost intervals, stationary and small reverse-noise rejection, volume cooldown retention until further movement, and large aggregate volume batches. Executor tests inject an audio stub: volume continues after the synthetic-input budget is exhausted, uses one aggregate write with the full delta, and still rejects missing Accessibility or reports unsupported software volume. Tests never adjust the real output volume or post synthetic input. The existing four native panel tests also pass with the immediate-width bar.
+
+In the isolated disabled preview, four-finger Click displayed all five category submenus. Selecting Navigation → Mission Control updated only the editor; Reset restored No Action and disabled Save. The full list was also confirmed in the old UI: its apparent shortage was a long scrolling menu, not action filtering. Real volume-bar timing and physical movement acceptance remain manual checks.
+
+Version 2.5.1 was installed after checking the working app had no unsaved edits. The installed binary matches the tested build, its code signature verifies, and the saved configuration hash is unchanged. Both permissions were unverified for the changed local binary; only this bundle ID’s obsolete Accessibility and ListenEvent records were reset, and the app reopened for fresh user approval. No permission was granted automatically.

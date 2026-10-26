@@ -1,9 +1,9 @@
-# EvenBetterTouchTool 2.5.0 — Stable volume feedback and gesture swaps
+# EvenBetterTouchTool 2.5.1 — Responsive volume and complete action menus
 
-- Volume feedback keeps one anchor for its whole visible session. A fixed-width status item prevents the percentage from shifting the menu bar layout repeatedly; updates reuse the existing view.
-- Other interaction starts a short fade: mouse movement/buttons/drag, keyboard/modifiers, normal scrolling, app changes, and other gestures/actions. Active volume gestures keep updating the panel. It still fades after two idle seconds; new volume input can cancel a fade without a stale completion hiding the panel.
-- Six small ↕ buttons between the three/four-finger rows swap that column's complete mappings. Profile swaps resolve inherited values without changing globals or other profiles. Row toggles stay attached to their finger counts. Swaps remain pending until Save, and Reset restores the saved mappings.
+- Assigned action uses five compact category submenus for every gesture, including four-finger click. Choices no longer hide above a long menu’s scroll position. Save and Reset behavior is unchanged.
+- Volume fill updates immediately, without a native progress-bar animation trailing the actual percentage. The stable anchor and interaction fade remain.
+- Forward movement retains every increment after direction lock, including a tiny final increment completing a distance interval. Jitter filtering remains on direction reversals.
+- Continuous volume batches bypass synthetic-key rate/burst limits and use one Core Audio adjustment for all intervals. An optional volume cooldown retains steps until subsequent movement after it ends; stationary fingers never repeat. Chrome’s 0.05-second cooldown is preserved.
+- Saved mappings, thresholds, calibration, and profiles are preserved. Uncalibrated distances remain percentages of each trackpad axis.
 
-All 224 automated checks pass: 177 core, 29 app-model, 14 installer, and four native volume-panel tests. The native tests check fixed frames across 9%/99%/100% updates, interaction fade, revival during a fade, and idle timeout. They show simulated percentages without changing system audio or injecting input. Visual inspection of the new grid and live mouse/gesture dismissal are manual acceptance checks.
-
-The release remains experimental, ad-hoc signed, and unnotarized. Existing saved settings are preserved. Updating the installed binary may require fresh Accessibility and Input Monitoring approval.
+All 231 automated checks pass (182 core, 31 app-model/executor, 14 installer, four native volume-panel checks). The action submenus and editor Reset were verified in an isolated disabled preview. Physical volume responsiveness and distance acceptance still require on-device testing. Locally ad-hoc signed updates can require renewed Accessibility and Input Monitoring approval; the application never grants permissions itself.

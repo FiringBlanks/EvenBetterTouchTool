@@ -118,9 +118,13 @@ final class GestureEngine {
         }
         let horizontal = axis!
         let movement = horizontal ? (x-lastX)*scale.width : (y-lastY)*scale.height
-        guard abs(movement)+1e-7 >= sensitivity.jitterMM, abs(movement) > 1e-9 else { return [] }
-        lastX = x; lastY = y
+        guard abs(movement) > 1e-9 else { return [] }
         let sign = movement > 0 ? 1.0 : -1.0
+        // Once a direction is established, retain every increment, including
+        // sub-deadband movement that completes an interval. The deadband only
+        // rejects small reversals, accumulating from the last accepted point.
+        guard sign == lastSign || abs(movement)+1e-7 >= sensitivity.jitterMM else { return [] }
+        lastX = x; lastY = y
         // Fractional credit belongs to its direction. Reversal starts from the
         // turning point, so it never pays off distance travelled the other way.
         if sign != lastSign { remainder = 0; lastSign = sign }
@@ -141,11 +145,13 @@ final class GestureEngine {
         let distance = m.distanceMM ?? (horizontal ? sensitivity.horizontalMM : sensitivity.verticalMM)
         guard remainder + 1e-7 >= distance else { return [] }
         let continuous = m.continuous && m.action.supportsContinuous
+        let continuousVolume = continuous && [.volumeUp,.volumeDown].contains(m.action.kind)
         if !continuous && singleFired { remainder = 0; return [] }
         let count = continuous ? Int(floor((remainder + 1e-7)/distance)) : 1
         swiped = true
+        if continuousVolume && frame.time-lastFire < m.cooldown { return [] }
         remainder = continuous ? max(0, remainder-Double(count)*distance) : 0
-        guard count <= 64 else { cancel("Movement burst too large; lift fingers"); return [] }
+        guard continuousVolume || count <= 64 else { cancel("Movement burst too large; lift fingers"); return [] }
         guard frame.time-lastFire >= m.cooldown else { return [] }
         lastFire = frame.time; singleFired = true; snapshot.reason = ""
         return [GestureTrigger(gesture: g, mapping: m, count: count)]
